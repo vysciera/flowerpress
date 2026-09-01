@@ -28,6 +28,30 @@ var migrations = []Migration{
 			);
 		`,
 	},
+	{
+		Version: 2,
+		Name:    "create sessions",
+		SQL: `
+			CREATE TABLE sessions (
+				id INTEGER PRIMARY KEY,
+				user_id INTEGER NOT NULL,
+				token_hash TEXT NOT NULL UNIQUE,
+				session_version INTEGER NOT NULL,
+				expires_at TEXT NOT NULL,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+				FOREIGN KEY (user_id)
+					REFERENCES users(id)
+					ON DELETE CASCADE
+			);
+
+			CREATE INDEX idx_sessions_user_id
+				ON sessions(user_id);
+
+			CREATE INDEX idx_sessions_expires_at
+				ON sessions(expires_at);
+		`,
+	},
 }
 
 func Migrate(db *sql.DB) error {
