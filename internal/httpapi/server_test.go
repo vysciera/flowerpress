@@ -34,6 +34,150 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestLogin(t *testing.T) {
+	server := testServer(t)
+
+	registerBody := strings.NewReader(`
+		{
+			"username": "flower",
+			"password": "newgarden"
+		}
+	`)
+
+	registerRequest := httptest.NewRequest(http.MethodPost, "/api/auth/register", registerBody)
+	registerResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(registerResponse, registerRequest)
+	if registerResponse.Code != http.StatusCreated {
+		t.Fatalf("register returned %d, %s", registerResponse.Code, registerResponse.Body.String())
+	}
+
+	loginBody := strings.NewReader(`
+		{
+			"username": "flower",
+			"password": "newgarden"
+		}
+	`)
+
+	loginRequest := httptest.NewRequest(http.MethodPost, "/api/auth/login", loginBody)
+	loginResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(loginResponse, loginRequest)
+	if loginResponse.Code != http.StatusOK {
+		t.Fatalf("Expected status %d, got %d: %s", http.StatusOK, loginResponse.Code, loginResponse.Body.String())
+	}
+}
+
+func TestLoginSetsSessionCookie(t *testing.T) {
+	server := testServer(t)
+
+	register := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/register",
+		strings.NewReader(
+			`{"username":"flower","password":"newgarden"}`,
+		),
+	)
+
+	server.Handler().ServeHTTP(
+		httptest.NewRecorder(),
+		register,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/login",
+		strings.NewReader(
+			`{"username":"flower","password":"newgarden"}`,
+		),
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	result := response.Result()
+	defer result.Body.Close()
+
+	cookies := result.Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("expected 1 cookie, got %d", len(cookies))
+	}
+
+	// Just one cookie bro, please bro.
+	cookie := cookies[0]
+
+	if cookie.Name != sessionCookieName {
+		t.Fatalf("expected cookie %q, got %q", sessionCookieName, cookie.Name)
+	}
+
+	if cookie.Value == "" {
+		t.Fatal("expected session cookie value")
+	}
+
+	if !cookie.HttpOnly {
+		t.Fatal("expected session cookie to be HttpOnly")
+	}
+
+	if cookie.Path != "/" {
+		t.Fatalf("expected cookie path %q, got %q", "/", cookie.Path)
+	}
+
+	if cookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("expected SameSite Lax, got %v", cookie.SameSite)
+	}
+}
+
+func TestLoginInvalidPassword(t *testing.T) {
+	server := testServer(t)
+
+	register := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/register",
+		strings.NewReader(
+			`{"username":"flower","password":"newgarden"}`,
+		),
+	)
+
+	server.Handler().ServeHTTP(
+		httptest.NewRecorder(),
+		register,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/login",
+		strings.NewReader(
+			`{"username":"flower","password":"badpwd-garden"}`,
+		),
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expect status %d, got %d", http.StatusUnauthorized, response.Code)
+	}
+}
+
+func TestLoginUnknownUser(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/login",
+		strings.NewReader(
+			`{"username":"nobody","password":"nopassword"}`,
+		),
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, response.Code)
+	}
+}
+
 func TestRegister(t *testing.T) {
 	server := testServer(t)
 
