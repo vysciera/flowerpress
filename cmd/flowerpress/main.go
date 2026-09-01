@@ -1,12 +1,24 @@
 package main
 
-import(
-	"fmt"
+import (
 	"flowerpress/internal/config"
+	"flowerpress/internal/database"
+	"fmt"
+	"log"
 )
 
 func main() {
 	cfg := config.Load()
+	db, err := database.Open(cfg.DatabasePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer db.Close()
+
+	if err := database.Migrate(db); err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Printf("flowerpress-next\n")
 	fmt.Printf("environment: %s\n", cfg.Environment)
