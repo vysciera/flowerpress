@@ -12,7 +12,23 @@ type Migration struct {
 }
 
 // God I love SQL.
-var migrations = []Migration{}
+var migrations = []Migration{
+	{
+		Version: 1,
+		Name:    "create users",
+		SQL: `
+			CREATE TABLE users (
+				id INTEGER PRIMARY KEY,
+				username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+				password_hash TEXT NOT NULL,
+				recovery_hash TEXT,
+				session_version INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTMAP
+			);
+		`,
+	},
+}
 
 func Migrate(db *sql.DB) error {
 	if err := ensureMigrationsTable(db); err != nil {
@@ -79,7 +95,7 @@ func applyMigration(db *sql.DB, migration Migration) error {
 	}
 
 	if _, err := tx.Exec(`
-		INSERT INTO schema migrations (version, name)
+		INSERT INTO schema_migrations (version, name)
 		VALUES (?, ?)
 	`, migration.Version, migration.Name); err != nil {
 		return err
