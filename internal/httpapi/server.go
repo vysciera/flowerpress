@@ -30,6 +30,8 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /health", s.handleHealth)
+
+	s.mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
