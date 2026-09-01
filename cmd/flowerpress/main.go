@@ -3,8 +3,13 @@ package main
 import (
 	"flowerpress/internal/config"
 	"flowerpress/internal/database"
-	"fmt"
+	"flowerpress/internal/httpapi"
+	"flowerpress/internal/service"
+	"flowerpress/internal/store/turso"
+
 	"log"
+	"net/http"
+	"time"
 )
 
 func main() {
@@ -20,8 +25,21 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("flowerpress-next\n")
-	fmt.Printf("environment: %s\n", cfg.Environment)
-	fmt.Printf("address: %s\n", cfg.Address)
-	fmt.Printf("database: %s\n", cfg.DatabasePath)
+	userRepository := turso.NewUserRepository(db)
+	sessionRepository := turso.NewSessionRepository(db)
+
+	userService := service.NewUserService(userRepository)
+
+	sessionService := service.NewSessionService(
+		sessionRepository,
+		userRepository,
+		7*24*time.Hour,
+	)
+
+	server := httpapi.NewServer(userService, sessionService)
+	log.Printf("flowerpress is listening on %s", cfg.Address)
+
+	if err := http.ListenAndServe(cfg.Address, server.Handler()); err != nil {
+		log.Fatal(err)
+	}
 }
