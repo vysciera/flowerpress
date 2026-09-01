@@ -24,7 +24,7 @@ var migrations = []Migration{
 				recovery_hash TEXT,
 				session_version INTEGER NOT NULL DEFAULT 0,
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTMAP
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 			);
 		`,
 	},
