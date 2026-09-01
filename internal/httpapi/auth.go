@@ -22,6 +22,30 @@ type userResponse struct {
 	Username string `json:"username"`
 }
 
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(sessionCookieName)
+
+	if err == nil { // Great Scott!!
+		if err := s.sessions.Delete(
+			r.Context(),
+			cookie.Value,
+		); err != nil {
+			writeJSON(
+				w,
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "internal server error",
+				},
+			)
+
+			return
+		}
+	}
+
+	clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var request loginRequest
 

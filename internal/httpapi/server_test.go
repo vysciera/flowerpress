@@ -34,6 +34,152 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestLogout(t *testing.T) {
+	server := testServer(t)
+
+	register := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/register",
+		strings.NewReader(
+			`{"username":"flower","password":"newgarden"}`,
+		),
+	)
+
+	server.Handler().ServeHTTP( // Normalize test structures later cause this is driving me insane
+		httptest.NewRecorder(),
+		register,
+	)
+
+	login := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/login",
+		strings.NewReader(
+			`{"username":"flower","password":"newgarden"}`,
+		),
+	)
+
+	loginResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		loginResponse,
+		login,
+	)
+
+	result := loginResponse.Result()
+	defer result.Body.Close()
+
+	cookies := result.Cookies()
+
+	if len(cookies) != 1 {
+		t.Fatalf(
+			"expected session cookie, got %d cookies",
+			len(cookies),
+		)
+	}
+
+	// coocie.
+	sessionCookie := cookies[0]
+
+	logout := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/logout",
+		nil,
+	)
+
+	logout.AddCookie(sessionCookie)
+
+	logoutResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		logoutResponse,
+		logout,
+	)
+
+	if logoutResponse.Code != http.StatusNoContent {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNoContent,
+			logoutResponse.Code,
+		)
+	}
+}
+
+func TestLogoutClearsSessionCookie(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/logout",
+		nil,
+	)
+
+	request.AddCookie(&http.Cookie{
+		Name:  sessionCookieName,
+		Value: "some-token",
+	})
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	result := response.Result()
+	defer result.Body.Close()
+
+	cookies := result.Cookies()
+
+	if len(cookies) != 1 {
+		t.Fatalf(
+			"expected 1 cookie, got %d",
+			len(cookies),
+		)
+	}
+
+	cookie := cookies[0]
+
+	if cookie.Name != sessionCookieName {
+		t.Fatalf(
+			"expected cookie %q, got %q",
+			sessionCookieName,
+			cookie.Name,
+		)
+	}
+
+	if cookie.MaxAge >= 0 {
+		t.Fatalf(
+			"expected cookie to be expired, got MaxAge %d",
+			cookie.MaxAge,
+		)
+	}
+}
+
+func TestLogoutWithoutSession(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/logout",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf(
+			"unexpected status %d, got %d",
+			http.StatusNoContent,
+			response.Code,
+		)
+	}
+}
+
 func TestLogin(t *testing.T) {
 	server := testServer(t)
 

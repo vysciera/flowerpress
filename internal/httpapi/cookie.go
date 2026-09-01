@@ -14,3 +14,14 @@ func setSessionCookie(w http.ResponseWriter, token string) {
 		SameSite: http.SameSiteLaxMode,
 	})
 }
+
+func clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+}
