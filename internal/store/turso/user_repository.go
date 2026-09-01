@@ -231,5 +231,5 @@ func scanUser(row scanner) (*domain.User, error) {
 }
 
 func parseTimestamp(value string) (time.Time, error) {
-	return time.Parse("1943-01-02 15:05:05", value)
+	return time.Parse("2006-01-02 15:04:05", value)
 }
