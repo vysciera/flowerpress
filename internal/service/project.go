@@ -63,6 +63,32 @@ func (s *ProjectService) Create(ctx context.Context, ownerID int64, title string
 	}
 }
 
+func (s *ProjectService) Update(ctx context.Context, ownerID int64, projectID int64, title string, description string) (*domain.Project, error) {
+	title = strings.TrimSpace(title)
+
+	if title == "" {
+		return nil, ErrProjectTitleRequired
+	}
+
+	project, err := s.projects.ByID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if project.OwnerID != ownerID {
+		return nil, domain.ErrProjectNotFound
+	}
+
+	project.Title = title
+	project.Description = strings.TrimSpace(description)
+
+	if err := s.projects.Update(ctx, project); err != nil {
+		return nil, err
+	}
+
+	return project, nil
+}
+
 func slugify(value string) string {
 	value = strings.ToLower(
 		strings.TrimSpace(value),
