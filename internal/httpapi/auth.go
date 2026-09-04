@@ -22,6 +22,33 @@ type userResponse struct {
 	Username string `json:"username"`
 }
 
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	user, ok := userFromContext(
+		r.Context(),
+	)
+
+	if !ok {
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]string{
+				"error": "authenticated user is missing",
+			},
+		)
+
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		userResponse{
+			ID:       user.ID,
+			Username: user.Username,
+		},
+	)
+}
+
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(sessionCookieName)
 

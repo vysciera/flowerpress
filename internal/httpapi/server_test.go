@@ -390,3 +390,157 @@ func TestRegisterInvalidJSON(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
 	}
 }
+
+func TestMeRequiresAuthentication(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/auth/me",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"xpected status %d, got %d",
+			http.StatusUnauthorized,
+			response.Code,
+		)
+	}
+}
+
+func TestMeRejectsInvalidSession(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/auth/me",
+		nil,
+	)
+
+	request.AddCookie(&http.Cookie{
+		Name:  sessionCookieName,
+		Value: "invalid-session-token",
+	})
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			response.Code,
+		)
+	}
+}
+
+func TestMeReturnsAuthenticatedUser(t *testing.T) {
+	server := testServer(t)
+
+	register := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/register",
+		strings.NewReader(
+			`{"username":"flower","password":"newgarden"}`,
+		),
+	)
+
+	registerResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		registerResponse,
+		register,
+	)
+
+	if registerResponse.Code != http.StatusCreated {
+		t.Fatalf(
+			"register returned %d: %s",
+			registerResponse.Code,
+			registerResponse.Body.String(),
+		)
+	}
+
+	login := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/login",
+		strings.NewReader(
+			`{"username":"flower","password":"newgarden"}`,
+		),
+	)
+
+	loginResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		loginResponse,
+		login,
+	)
+
+	if loginResponse.Code != http.StatusOK {
+		t.Fatalf(
+			"login returned %d: %s",
+			loginResponse.Code,
+			loginResponse.Body.String(),
+		)
+	}
+
+	result := loginResponse.Result()
+	defer result.Body.Close()
+
+	cookies := result.Cookies()
+
+	if len(cookies) != 1 {
+		t.Fatalf(
+			"expected session cookie, got %d cookies",
+			len(cookies),
+		)
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/auth/me",
+		nil,
+	)
+
+	request.AddCookie(cookies[0])
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	expected := `"username":"flower"`
+
+	if !strings.Contains(
+		response.Body.String(),
+		expected,
+	) {
+		t.Fatalf(
+			"expected response to contain %q, got %s",
+			expected,
+			response.Body.String(),
+		)
+	}
+}
