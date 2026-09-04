@@ -268,3 +268,144 @@ func TestProjectServiceUpdateRejectsDifferentOwner(t *testing.T) {
 		t.Fatalf("expected ErrProjectNotFound, got %v", err)
 	}
 }
+
+func TestProjectServicePublish(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	published, err := projects.Publish(
+		ctx,
+		user.ID,
+		project.ID,
+	)
+	if err != nil {
+		t.Fatalf("publish project: %v", err)
+	}
+
+	if published.Status != domain.ProjectStatusPublished {
+		t.Fatalf("expected status %q, got %q", domain.ProjectStatusPublished, published.Status)
+	}
+
+	if published.PublishedAt == nil {
+		t.Fatal("expected PublishedAt")
+	}
+}
+
+func TestProjectServiceUnpublish(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Publish(
+		ctx,
+		user.ID,
+		project.ID,
+	)
+	if err != nil {
+		t.Fatalf("publish project: %v", err)
+	}
+
+	publishedAt := project.PublishedAt
+
+	project, err = projects.Unpublish(
+		ctx,
+		user.ID,
+		project.ID,
+	)
+	if err != nil {
+		t.Fatalf("unpublish project: %v", err)
+	}
+
+	if project.Status != domain.ProjectStatusDraft {
+		t.Fatalf("expected status %q, got %q", domain.ProjectStatusDraft, project.Status)
+	}
+
+	if project.PublishedAt == nil {
+		t.Fatal("expected PublishedAt to be preserved")
+	}
+
+	if !project.PublishedAt.Equal(*publishedAt) {
+		t.Fatal("expected original PublishedAt to be preserved")
+	}
+}
+
+func TestProjectServiceArchive(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("Create project: %v", err)
+	}
+
+	project, err = projects.Archive(
+		ctx,
+		user.ID,
+		project.ID,
+	)
+	if err != nil {
+		t.Fatalf("archive project: %v", err)
+	}
+
+	if project.Status != domain.ProjectStatusArchived {
+		t.Fatalf("expected status %q, got %q", domain.ProjectStatusArchived, project.Status)
+	}
+}
+
+func TestProjectServiceCannotPublishArchivedProject(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Archive(
+		ctx,
+		user.ID,
+		project.ID,
+	)
+	if err != nil {
+		t.Fatalf("archive project: %v", err)
+	}
+
+	_, err = projects.Publish(
+		ctx,
+		user.ID,
+		project.ID,
+	)
+
+	if !errors.Is(err, ErrInvalidProjectTransition) {
+		t.Fatalf("expected ErrInvalidProjectTransition, got %v", err)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	"flowerpress/internal/domain"
@@ -80,6 +81,84 @@ func (s *ProjectService) Update(ctx context.Context, ownerID int64, projectID in
 
 	project.Title = title
 	project.Description = strings.TrimSpace(description)
+
+	if err := s.projects.Update(ctx, project); err != nil {
+		return nil, err
+	}
+
+	return project, nil
+}
+
+func (s *ProjectService) Publish(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
+	project, err := s.projectForOwner(ctx, ownerID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if project.Status == domain.ProjectStatusArchived {
+		return nil, ErrInvalidProjectTransition
+	}
+
+	if project.Status == domain.ProjectStatusPublished {
+		return project, nil
+	}
+
+	project.Status = domain.ProjectStatusPublished
+
+	if project.PublishedAt == nil {
+		now := time.Now().UTC()
+		project.PublishedAt = &now
+	}
+
+	if err := s.projects.Update(ctx, project); err != nil {
+		return nil, err
+	}
+
+	return project, nil
+}
+
+func (s *ProjectService) Unpublish(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
+	project, err := s.projectForOwner(
+		ctx,
+		ownerID,
+		projectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if project.Status == domain.ProjectStatusArchived {
+		return nil, ErrInvalidProjectTransition
+	}
+
+	if project.Status == domain.ProjectStatusDraft {
+		return project, nil
+	}
+
+	project.Status = domain.ProjectStatusDraft
+
+	if err := s.projects.Update(ctx, project); err != nil {
+		return nil, err
+	}
+
+	return project, nil
+}
+
+func (s *ProjectService) Archive(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
+	project, err := s.projectForOwner(
+		ctx,
+		ownerID,
+		projectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if project.Status == domain.ProjectStatusArchived {
+		return project, nil
+	}
+
+	project.Status = domain.ProjectStatusArchived
 
 	if err := s.projects.Update(ctx, project); err != nil {
 		return nil, err
