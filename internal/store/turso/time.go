@@ -11,3 +11,11 @@ func parseTimestamp(value string) (time.Time, error) {
 func formatTimestamp(value time.Time) string {
 	return value.UTC().Format(timestampLayout)
 }
+
+func formatNullableTimestamp(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+
+	return formatTimestamp(*value)
+}
