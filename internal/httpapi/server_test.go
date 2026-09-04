@@ -544,3 +544,92 @@ func TestMeReturnsAuthenticatedUser(t *testing.T) {
 		)
 	}
 }
+
+func TestRegisterRejectsUnknownFields(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/register",
+		strings.NewReader(`
+			{
+				"username": "flower",
+				"password": "newgarden",
+				"admin": true
+			}	
+		`),
+	)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			response.Code,
+		)
+	}
+}
+
+func TestRegisterRejectsMultipleJSONObjects(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/register",
+		strings.NewReader(`
+			{"username":"flower","password":"newgarden"}
+			{"username":"garden","password":"fakegarden"}
+		`),
+	)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			response.Code,
+		)
+	}
+}
+
+func TestRegisterRejectsOversizedBody(t *testing.T) {
+	server := testServer(t)
+
+	body := strings.Repeat(
+		"x",
+		maxRequestBodySize+1,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/auth/register",
+		strings.NewReader(body),
+	)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusRequestEntityTooLarge,
+			response.Code,
+		)
+	}
+}
