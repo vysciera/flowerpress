@@ -52,6 +52,47 @@ var migrations = []Migration{
 				ON sessions(expires_at);
 		`,
 	},
+	{
+		Version: 3,
+		Name:    "create projects",
+		SQL: `
+			CREATE TABLE projects (
+				id INTEGER PRIMARY KEY,
+				owner_id INTEGER NOT NULL,
+
+				title TEXT NOT NULL,
+				slug TEXT NOT NULL UNIQUE,
+				description TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL DEFAULT 'draft',
+
+				published_at TEXT,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+				FOREIGN KEY (owner_id)
+					REFERENCES users(id)
+					ON DELETE CASCADE,
+
+				CHECK (
+					status IN (
+						'draft',
+						'published',
+						'unlisted',
+						'archived'
+					)
+				)
+			);
+
+			CREATE INDEX idx_projects_owner_id
+				ON projects(owner_id);
+
+			CREATE INDEX idx_projects_status
+				ON projects(status);
+
+			CREATE INDEX idx_projects_created_at
+				ON projects(created_at);
+		`,
+	},
 }
 
 func Migrate(db *sql.DB) error {
