@@ -167,6 +167,34 @@ func (s *ProjectService) Archive(ctx context.Context, ownerID int64, projectID i
 	return project, nil
 }
 
+func (s *ProjectService) Unlist(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
+	project, err := s.projectForOwner(ctx, ownerID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if project.Status == domain.ProjectStatusArchived {
+		return nil, ErrInvalidProjectTransition
+	}
+
+	if project.Status == domain.ProjectStatusUnlisted {
+		return project, nil
+	}
+
+	project.Status = domain.ProjectStatusUnlisted
+
+	if project.PublishedAt == nil {
+		now := time.Now().UTC()
+		project.PublishedAt = &now
+	}
+
+	if err := s.projects.Update(ctx, project); err != nil {
+		return nil, err
+	}
+
+	return project, nil
+}
+
 func (s *ProjectService) ByID(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
 	return s.projectForOwner(ctx, ownerID, projectID)
 }

@@ -551,3 +551,120 @@ func TestProjectSErviceByPublicSlugPublished(t *testing.T) {
 		t.Fatalf("expected project ID %d, got %d", project.ID, found.ID)
 	}
 }
+
+func TestProjectServiceUnlist(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Unlist(ctx, user.ID, project.ID)
+	if err != nil {
+		t.Fatalf("unlist project: %v", err)
+	}
+
+	if project.Status != domain.ProjectStatusUnlisted {
+		t.Fatalf("expected status %q, got %q", domain.ProjectStatusUnlisted, project.Status)
+	}
+
+	if project.PublishedAt == nil {
+		t.Fatal("expected PublishedAt")
+	}
+}
+
+func TestProjectServiceUnlistPreservesPublishedAt(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create proejct: %v", err)
+	}
+
+	project, err = projects.Publish(ctx, user.ID, project.ID)
+	if err != nil {
+		t.Fatalf("publish project: %v", err)
+	}
+
+	publishedAt := *project.PublishedAt
+
+	project, err = projects.Unlist(ctx, user.ID, project.ID)
+	if err != nil {
+		t.Fatalf("unlist project: %v", err)
+	}
+
+	if project.PublishedAt == nil {
+		t.Fatal("expected PublishedAt")
+	}
+
+	if !project.PublishedAt.Equal(publishedAt) {
+		t.Fatal("expected PublishedAt to be preserved")
+	}
+}
+
+func TestProjectServiceCannotUnlistArchivedProject(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Archive(ctx, user.ID, project.ID)
+	if err != nil {
+		t.Fatalf("archive project: %v", err)
+	}
+
+	_, err = projects.Unlist(ctx, user.ID, project.ID)
+	if !errors.Is(err, ErrInvalidProjectTransition) {
+		t.Fatalf("expected ErrInvalidProjectTransition, got %v", err)
+	}
+}
+
+func TestProjectServiceByPublicSlugUnlisted(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Unlist(ctx, user.ID, project.ID)
+	if err != nil {
+		t.Fatalf("unlist project: %v", err)
+	}
+
+	found, err := projects.ByPublicSlug(ctx, project.Slug)
+	if err != nil {
+		t.Fatalf("find unlisted project: %v", err)
+	}
+
+	if found.ID != project.ID {
+		t.Fatalf("expected project ID %d, got %d", project.ID, found.ID)
+	}
+}
