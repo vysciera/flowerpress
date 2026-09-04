@@ -40,6 +40,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 
+	// User Routes
 	s.mux.Handle("GET /api/auth/me", // wuh
 		s.requireAuth(
 			http.HandlerFunc(
@@ -51,6 +52,43 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	s.mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	s.mux.HandleFunc("POST /api/auth/register", s.handleRegister)
+
+	// Project Routes
+	s.mux.Handle(
+		"GET /api/projects",
+		s.requireAuth(
+			http.HandlerFunc(
+				s.handleListProjects,
+			),
+		),
+	)
+
+	s.mux.Handle(
+		"POST /api/projects",
+		s.requireAuth(
+			http.HandlerFunc(
+				s.handleCreateProject,
+			),
+		),
+	)
+
+	s.mux.Handle(
+		"GET /api/projects/{id}",
+		s.requireAuth(
+			http.HandlerFunc(
+				s.handleGetProject,
+			),
+		),
+	)
+
+	s.mux.Handle(
+		"PUT /api/projects/{id}",
+		s.requireAuth(
+			http.HandlerFunc(
+				s.handleUpdateProject,
+			),
+		),
+	)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

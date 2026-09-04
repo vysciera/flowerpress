@@ -109,3 +109,31 @@ func loginTestUser(t *testing.T, server *Server) *http.Cookie { // Refactor prop
 
 	return cookies[0]
 }
+
+func createTestProject(t *testing.T, server *Server, cookie *http.Cookie, title string) string {
+	t.Helper()
+
+	endpoint := "/api/projects"
+	request := httptest.NewRequest(
+		http.MethodPost,
+		endpoint,
+		strings.NewReader(
+			`{"title":"`+title+`"}`,
+		),
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf(
+			"create test project: expected %d, got %d: %s",
+			http.StatusCreated,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	return response.Body.String()
+}
