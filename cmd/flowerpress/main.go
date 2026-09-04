@@ -7,13 +7,19 @@ import (
 	"flowerpress/internal/service"
 	"flowerpress/internal/store/turso"
 
+	"context"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
 func main() {
 	cfg := config.Load()
+
 	db, err := database.Open(cfg.DatabasePath)
 	if err != nil {
 		log.Fatal(err)
@@ -36,10 +42,54 @@ func main() {
 		7*24*time.Hour,
 	)
 
-	server := httpapi.NewServer(userService, sessionService, cfg.SecureCookies)
-	log.Printf("flowerpress is listening on %s", cfg.Address)
+	apiServer := httpapi.NewServer(
+		userService,
+		sessionService,
+		cfg.SecureCookies,
+	)
 
-	if err := http.ListenAndServe(cfg.Address, server.Handler()); err != nil {
-		log.Fatal(err)
+	httpServer := httpapi.NewHTTPServer(
+		cfg.Address,
+		apiServer.Handler(),
+	)
+
+	shutdown := make(chan os.Signal, 1)
+
+	signal.Notify(
+		shutdown,
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+
+	// Init Go routine
+	go func() {
+		log.Printf(
+			"flowerpress is listening on %s",
+			cfg.Address,
+		)
+
+		err := httpServer.ListenAndServe()
+
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("HTTP server: %v", err)
+		}
+	}()
+
+	// Graceful shutdown
+	<-shutdown
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+	defer cancel()
+
+	if err := httpServer.Shutdown(ctx); err != nil {
+		log.Printf(
+			"HTTP shutdown: %v",
+			err,
+		)
 	}
+
+	log.Println("flowerpress stopped")
 }
