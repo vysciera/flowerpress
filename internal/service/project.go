@@ -167,6 +167,29 @@ func (s *ProjectService) Archive(ctx context.Context, ownerID int64, projectID i
 	return project, nil
 }
 
+func (s *ProjectService) ByID(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
+	return s.projectForOwner(ctx, ownerID, projectID)
+}
+
+func (s *ProjectService) ListByOwner(ctx context.Context, ownerID int64) ([]*domain.Project, error) {
+	return s.projects.ListByOwner(ctx, ownerID)
+}
+
+func (s *ProjectService) ByPublicSlug(ctx context.Context, slug string) (*domain.Project, error) {
+	project, err := s.projects.BySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+
+	switch project.Status {
+	case domain.ProjectStatusPublished, domain.ProjectStatusUnlisted:
+		return project, nil
+
+	default:
+		return nil, domain.ErrProjectNotFound
+	}
+}
+
 func (s *ProjectService) projectForOwner(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
 	project, err := s.projects.ByID(ctx, projectID)
 
