@@ -244,7 +244,7 @@ func (r *ProjectRepository) Update(ctx context.Context, project *domain.Project)
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		fmt.Errorf("get affected rows: %w", err)
+		return fmt.Errorf("get affected rows: %w", err)
 	}
 
 	if rows == 0 {
