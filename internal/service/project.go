@@ -10,7 +10,10 @@ import (
 	"flowerpress/internal/domain"
 )
 
-var ErrProjectTitleRequired = errors.New("project title is required")
+var (
+	ErrProjectTitleRequired     = errors.New("project title is required")
+	ErrInvalidProjectTransition = errors.New("invalid project status transition")
+)
 
 type ProjectService struct {
 	projects domain.ProjectRepository
@@ -70,13 +73,9 @@ func (s *ProjectService) Update(ctx context.Context, ownerID int64, projectID in
 		return nil, ErrProjectTitleRequired
 	}
 
-	project, err := s.projects.ByID(ctx, projectID)
+	project, err := s.projectForOwner(ctx, ownerID, projectID)
 	if err != nil {
 		return nil, err
-	}
-
-	if project.OwnerID != ownerID {
-		return nil, domain.ErrProjectNotFound
 	}
 
 	project.Title = title
@@ -84,6 +83,20 @@ func (s *ProjectService) Update(ctx context.Context, ownerID int64, projectID in
 
 	if err := s.projects.Update(ctx, project); err != nil {
 		return nil, err
+	}
+
+	return project, nil
+}
+
+func (s *ProjectService) projectForOwner(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
+	project, err := s.projects.ByID(ctx, projectID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if project.OwnerID != ownerID {
+		return nil, domain.ErrProjectNotFound
 	}
 
 	return project, nil
