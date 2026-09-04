@@ -104,3 +104,50 @@ func TestProjectServiceCreateNormalizesSlug(t *testing.T) {
 		)
 	}
 }
+
+func TestProjectSErviceCreateResolvesDuplicateSlugs(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	first, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create first project: %v", err)
+	}
+
+	second, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create second project: %v", err)
+	}
+
+	third, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create third project: %v", err)
+	}
+
+	if first.Slug != "flowerpress" {
+		t.Fatalf("expected first slug %q, got %q", "flowerpress", first.Slug)
+	}
+
+	if second.Slug != "flowerpress-2" {
+		t.Fatalf("expected second slug %q, got %q", "flowerpress-2", second.Slug)
+	}
+
+	if third.Slug != "flowerpress-3" {
+		t.Fatalf("expected third slug %q, got %q", "flowerpress-3", third.Slug)
+	}
+}

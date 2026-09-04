@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"unicode"
 
@@ -28,22 +29,38 @@ func (s *ProjectService) Create(ctx context.Context, ownerID int64, title string
 		return nil, ErrProjectTitleRequired
 	}
 
+	baseSlug := slugify(title)
+
 	project := &domain.Project{
 		OwnerID:     ownerID,
 		Title:       title,
-		Slug:        slugify(title),
+		Slug:        baseSlug,
 		Description: strings.TrimSpace(description),
 		Status:      domain.ProjectStatusDraft,
 	}
 
-	if err := s.projects.Create(
-		ctx,
-		project,
-	); err != nil {
-		return nil, err
-	}
+	// Slug sequencing for duplicate titles
+	for suffix := 1; ; suffix++ {
+		if suffix == 1 {
+			project.Slug = baseSlug
+		} else {
+			project.Slug = fmt.Sprintf(
+				"%s-%d",
+				baseSlug,
+				suffix,
+			)
+		}
 
-	return project, nil
+		err := s.projects.Create(ctx, project)
+
+		if err == nil {
+			return project, nil
+		}
+
+		if !errors.Is(err, domain.ErrSlugTaken) {
+			return nil, err
+		}
+	}
 }
 
 func slugify(value string) string {
