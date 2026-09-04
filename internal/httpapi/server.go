@@ -7,16 +7,18 @@ import (
 )
 
 type Server struct {
-	users    *service.UserService
-	sessions *service.SessionService
-	mux      *http.ServeMux
+	users         *service.UserService
+	sessions      *service.SessionService
+	secureCookies bool
+	mux           *http.ServeMux
 }
 
-func NewServer(users *service.UserService, sessions *service.SessionService) *Server {
+func NewServer(users *service.UserService, sessions *service.SessionService, secureCookies bool) *Server {
 	s := &Server{
-		users:    users,
-		sessions: sessions,
-		mux:      http.NewServeMux(),
+		users:         users,
+		sessions:      sessions,
+		secureCookies: secureCookies,
+		mux:           http.NewServeMux(),
 	}
 
 	s.routes()

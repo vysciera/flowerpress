@@ -8,7 +8,7 @@ import (
 )
 
 func TestHealth(t *testing.T) {
-	server := NewServer(nil, nil)
+	server := NewServer(nil, nil, false)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -630,5 +630,27 @@ func TestRegisterRejectsOversizedBody(t *testing.T) {
 			http.StatusRequestEntityTooLarge,
 			response.Code,
 		)
+	}
+}
+
+func TestLoginSecureCookie(t *testing.T) {
+	server := testServer(t)
+	server.secureCookies = true
+
+	cookie := loginTestUser(t, server)
+
+	if !cookie.Secure {
+		t.Fatal("expected session cookie to be secure")
+	}
+}
+
+func TestLoginDevelopmentCookieNotSecure(t *testing.T) {
+	server := testServer(t)
+	server.secureCookies = false
+
+	cookie := loginTestUser(t, server)
+
+	if cookie.Secure {
+		t.Fatal("expected development session cookie to not be secure")
 	}
 }

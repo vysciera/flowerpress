@@ -69,7 +69,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	clearSessionCookie(w)
+	s.clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -124,7 +124,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setSessionCookie(w, token)
+	s.setSessionCookie(w, token)
 	writeJSON(
 		w,
 		http.StatusOK,

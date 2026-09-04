@@ -36,7 +36,7 @@ func main() {
 		7*24*time.Hour,
 	)
 
-	server := httpapi.NewServer(userService, sessionService)
+	server := httpapi.NewServer(userService, sessionService, cfg.SecureCookies)
 	log.Printf("flowerpress is listening on %s", cfg.Address)
 
 	if err := http.ListenAndServe(cfg.Address, server.Handler()); err != nil {
