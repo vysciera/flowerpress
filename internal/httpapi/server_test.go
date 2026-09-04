@@ -607,10 +607,9 @@ func TestRegisterRejectsMultipleJSONObjects(t *testing.T) {
 func TestRegisterRejectsOversizedBody(t *testing.T) {
 	server := testServer(t)
 
-	body := strings.Repeat(
-		"x",
-		maxRequestBodySize+1,
-	)
+	body := `{"username":"` +
+		strings.Repeat("a", maxRequestBodySize+1) +
+		`","password":"newgarden"}`
 
 	request := httptest.NewRequest(
 		http.MethodPost,
