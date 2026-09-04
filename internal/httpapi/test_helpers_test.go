@@ -36,10 +36,12 @@ func testServer(t *testing.T) *Server {
 
 	users := turso.NewUserRepository(db)
 	sessions := turso.NewSessionRepository(db)
+	projects := turso.NewProjectRepository(db)
 
 	return NewServer(
 		service.NewUserService(users),
 		service.NewSessionService(sessions, users, 24*time.Hour),
+		service.NewProjectService(projects),
 		false, // SecureCookie?
 	)
 }

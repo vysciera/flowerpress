@@ -31,9 +31,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Repos
 	userRepository := turso.NewUserRepository(db)
 	sessionRepository := turso.NewSessionRepository(db)
+	projectRepository := turso.NewProjectRepository(db)
 
+	// Services
 	userService := service.NewUserService(userRepository)
 
 	sessionService := service.NewSessionService(
@@ -42,9 +45,12 @@ func main() {
 		7*24*time.Hour,
 	)
 
+	projectService := service.NewProjectService(projectRepository)
+
 	apiServer := httpapi.NewServer(
 		userService,
 		sessionService,
+		projectService,
 		cfg.SecureCookies,
 	)
 

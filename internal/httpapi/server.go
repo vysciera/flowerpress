@@ -9,14 +9,21 @@ import (
 type Server struct {
 	users         *service.UserService
 	sessions      *service.SessionService
+	projects      *service.ProjectService
 	secureCookies bool
 	mux           *http.ServeMux
 }
 
-func NewServer(users *service.UserService, sessions *service.SessionService, secureCookies bool) *Server {
+func NewServer(
+	users *service.UserService,
+	sessions *service.SessionService,
+	projects *service.ProjectService,
+	secureCookies bool,
+) *Server {
 	s := &Server{
 		users:         users,
 		sessions:      sessions,
+		projects:      projects,
 		secureCookies: secureCookies,
 		mux:           http.NewServeMux(),
 	}
