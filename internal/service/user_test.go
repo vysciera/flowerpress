@@ -28,7 +28,7 @@ func testUserService(t *testing.T) *UserService {
 	})
 
 	if err := database.Migrate(db); err != nil {
-		t.Fatalf("migrate databse: %v", err)
+		t.Fatalf("migrate database: %v", err)
 	}
 
 	repo := turso.NewUserRepository(db)

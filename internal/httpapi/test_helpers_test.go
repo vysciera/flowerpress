@@ -23,7 +23,7 @@ func testServer(t *testing.T) *Server {
 
 	db, err := database.Open(path)
 	if err != nil {
-		t.Fatalf("open databse: %v", err)
+		t.Fatalf("open database: %v", err)
 	}
 
 	t.Cleanup(func() {
