@@ -355,7 +355,55 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-// !!Project lifecycle handling
+func (s *Server) handlePublicProject(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+
+	if slug == "" {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid project slug",
+			},
+		)
+		return
+	}
+
+	project, err := s.projects.ByPublicSlug(
+		r.Context(),
+		slug,
+	)
+
+	switch {
+	case errors.Is(err, domain.ErrProjectNotFound):
+		writeJSON(
+			w,
+			http.StatusNotFound,
+			map[string]string{
+				"error": "project not found",
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		projectToResponse(project),
+	)
+}
+
+// !Project lifecycle handling
 func (s *Server) handleProjectLifecycle(w http.ResponseWriter, r *http.Request, action projectLifecycleAction) {
 	user, ok := userFromContext(r.Context())
 	if !ok {

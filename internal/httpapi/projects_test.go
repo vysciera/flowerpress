@@ -775,3 +775,226 @@ func TestPublishArchivedProjectReturnsConflict(t *testing.T) {
 		)
 	}
 }
+
+func TestPublicProjectPublished(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	publishRequest := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/publish",
+			project.ID,
+		),
+		nil,
+	)
+
+	publishRequest.AddCookie(cookie)
+	publishResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(publishResponse, publishRequest)
+
+	if publishResponse.Code != http.StatusOK {
+		t.Fatalf(
+			"publish project: expected %d, got %d: %s",
+			http.StatusOK,
+			publishResponse.Code,
+			publishResponse.Body.String(),
+		)
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/public/projects/"+project.Slug,
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var found projectResponse
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&found); err != nil {
+		t.Fatalf("decode public project: %v", err)
+	}
+
+	if found.ID != project.ID {
+		t.Fatalf(
+			"expected project ID %d, got %d",
+			project.ID,
+			found.ID,
+		)
+	}
+}
+
+func TestPublicProjectDraftReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/public/projects/"+project.Slug,
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusNotFound,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+}
+
+func TestPublicProjectUnlisted(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	unlistRequest := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/unlist",
+			project.ID,
+		),
+		nil,
+	)
+
+	unlistRequest.AddCookie(cookie)
+	unlistResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(unlistResponse, unlistRequest)
+
+	if unlistResponse.Code != http.StatusOK {
+		t.Fatalf(
+			"unlist project: expected %d, got %d: %s",
+			http.StatusOK,
+			unlistResponse.Code,
+			unlistResponse.Body.String(),
+		)
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/public/projects/"+project.Slug,
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+}
+
+func TestPublicProjectArchivedReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	archiveRequest := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/archive",
+			project.ID,
+		),
+		nil,
+	)
+
+	archiveRequest.AddCookie(cookie)
+	archiveResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(archiveResponse, archiveRequest)
+
+	if archiveResponse.Code != http.StatusOK {
+		t.Fatalf(
+			"archive project: expected %d, got %d: %s",
+			http.StatusOK,
+			archiveResponse.Code,
+			archiveResponse.Body.String(),
+		)
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/public/projects/"+project.Slug,
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusNotFound,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+}
+
+func TestPublicProjectNotFound(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/public/projects/does-not-exist",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNotFound,
+			response.Code,
+		)
+	}
+}
