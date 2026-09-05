@@ -19,30 +19,30 @@ func NewMediaAssetRepository(db *sql.DB) *MediaAssetRepository {
 	}
 }
 
+var _ domain.MediaAssetRepository = (*MediaAssetRepository)(nil)
+
 func (r *MediaAssetRepository) Create(ctx context.Context, asset *domain.MediaAsset) error {
 	result, err := r.db.ExecContext(
 		ctx,
 		`
 			INSERT INTO media_assets (
-				owner_id,
 				storage_key,
 				original_name,
-				mime_types,
+				mime_type,
 				size_bytes,
 				sha256,
 				width,
 				height
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)	
+			VALUES (?, ?, ?, ?, ?, ?, ?)	
 		`,
-		asset.OwnerID,
 		asset.StorageKey,
 		asset.OriginalName,
 		asset.MIMEType,
 		asset.SizeBytes,
 		asset.SHA256,
-		asset.Width,
-		asset.Height,
+		nullableInt(asset.Width),
+		nullableInt(asset.Height),
 	)
 	if err != nil {
 		return fmt.Errorf("create media asset: %w", err)
@@ -65,13 +65,85 @@ func (r *MediaAssetRepository) Create(ctx context.Context, asset *domain.MediaAs
 	return nil
 }
 
+func (r *MediaAssetRepository) Update(ctx context.Context, asset *domain.MediaAsset) error {
+	result, err := r.db.ExecContext(
+		ctx,
+		`
+			UPDATE media_assets
+			SET
+				storage_key = ?,
+				original_name = ?,
+				mime_type = ?,
+				size_bytes = ?,
+				sha256 = ?,
+				width = ?,
+				height = ?,
+				updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`,
+		asset.StorageKey,
+		asset.OriginalName,
+		asset.MIMEType,
+		asset.SizeBytes,
+		asset.SHA256,
+		nullableInt(asset.Width),
+		nullableInt(asset.Height),
+		asset.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update media asset: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get media asset rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return domain.ErrMediaAssetNotFound
+	}
+
+	updated, err := r.ByID(ctx, asset.ID)
+	if err != nil {
+		return fmt.Errorf("reload updated media asset: %w", err)
+	}
+
+	*asset = *updated
+
+	return nil
+}
+
+func (r *MediaAssetRepository) Delete(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(
+		ctx,
+		`
+			DELETE FROM media_assets
+			WHERE id = ?
+		`,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("delete media asset: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get media asset rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return domain.ErrMediaAssetNotFound
+	}
+
+	return nil
+}
+
 func (r *MediaAssetRepository) ByID(ctx context.Context, id int64) (*domain.MediaAsset, error) {
 	row := r.db.QueryRowContext(
 		ctx,
 		`
 			SELECT
 				id,
-				owner_id,
 				storage_key,
 				original_name,
 				mime_type,
@@ -105,7 +177,6 @@ func (r *MediaAssetRepository) ByStorageKey(ctx context.Context, storageKey stri
 		`
 			SELECT
 				id,
-				owner_id,
 				storage_key,
 				original_name,
 				mime_type,
@@ -133,13 +204,12 @@ func (r *MediaAssetRepository) ByStorageKey(ctx context.Context, storageKey stri
 	return asset, nil
 }
 
-func (r *MediaAssetRepository) BySHA256(ctx context.Context, ownerID int64, hash string) (*domain.MediaAsset, error) {
+func (r *MediaAssetRepository) BySHA256(ctx context.Context, hash string) (*domain.MediaAsset, error) {
 	row := r.db.QueryRowContext(
-		ctx, // LIMIT 1 (??? its a SHA)
+		ctx, // ok man.
 		`
 			SELECT
 				id,
-				owner_id,
 				storage_key,
 				original_name,
 				mime_type,
@@ -150,12 +220,8 @@ func (r *MediaAssetRepository) BySHA256(ctx context.Context, ownerID int64, hash
 				created_at,
 				updated_at
 			FROM media_assets
-			WHERE owner_id = ?
-				AND sha256 = ?
-			ORDER BY id ASC
-			LIMIT 1	
+			WHERE sha256 = ?
 		`,
-		ownerID,
 		hash,
 	)
 
@@ -171,6 +237,47 @@ func (r *MediaAssetRepository) BySHA256(ctx context.Context, ownerID int64, hash
 	return asset, nil
 }
 
+func (r *MediaAssetRepository) List(ctx context.Context) ([]*domain.MediaAsset, error) {
+	rows, err := r.db.QueryContext(
+		ctx,
+		`
+			SELECT
+				id,
+				storage_key,
+				original_name,
+				mime_type,
+				size_bytes,
+				sha256,
+				width,
+				height,
+				created_at,
+				updated_at
+			FROM media_assets
+			ORDER BY created_at DESC, id DESC
+		`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list media assets: %w", err)
+	}
+	defer rows.Close()
+
+	assets := make([]*domain.MediaAsset, 0)
+	for rows.Next() {
+		asset, err := scanMediaAsset(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan media asset: %w", err)
+		}
+
+		assets = append(assets, asset)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate media assets: %w", err)
+	}
+
+	return assets, nil
+}
+
 func scanMediaAsset(row scanner) (*domain.MediaAsset, error) {
 	var (
 		asset     domain.MediaAsset
@@ -180,9 +287,8 @@ func scanMediaAsset(row scanner) (*domain.MediaAsset, error) {
 		updatedAt string
 	)
 
-	err := row.Scan(
+	if err := row.Scan(
 		&asset.ID,
-		&asset.OwnerID,
 		&asset.StorageKey,
 		&asset.OriginalName,
 		&asset.MIMEType,
@@ -192,8 +298,7 @@ func scanMediaAsset(row scanner) (*domain.MediaAsset, error) {
 		&height,
 		&createdAt,
 		&updatedAt,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
 
@@ -207,6 +312,8 @@ func scanMediaAsset(row scanner) (*domain.MediaAsset, error) {
 		asset.Height = &value
 	}
 
+	var err error
+
 	asset.CreatedAt, err = parseTimestamp(createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("parse created_at: %w", err)
@@ -218,4 +325,12 @@ func scanMediaAsset(row scanner) (*domain.MediaAsset, error) {
 	}
 
 	return &asset, nil
+}
+
+func nullableInt(value *int) any {
+	if value == nil {
+		return nil
+	}
+
+	return *value
 }

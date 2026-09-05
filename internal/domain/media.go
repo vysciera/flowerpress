@@ -3,8 +3,7 @@ package domain
 import "time"
 
 type MediaAsset struct {
-	ID      int64
-	OwnerID int64
+	ID int64
 
 	StorageKey   string
 	OriginalName string

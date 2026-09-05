@@ -15,7 +15,7 @@ type ProjectRepository interface {
 
 	ByID(ctx context.Context, id int64) (*Project, error)
 	BySlug(ctx context.Context, slug string) (*Project, error)
-	ListByOwner(ctx context.Context, ownerID int64) ([]*Project, error)
+	List(ctx context.Context) ([]*Project, error)
 
 	Update(ctx context.Context, project *Project) error
 	Delete(ctx context.Context, id int64) error

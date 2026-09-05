@@ -26,17 +26,15 @@ func (r *ProjectRepository) Create(ctx context.Context, project *domain.Project)
 		ctx,
 		`
 			INSERT INTO projects (
-				owner_id,
 				title,
 				slug,
 				description,
 				status,
 				published_at
 			)
-			VALUES (?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?)
 			ON CONFLICT(slug) DO NOTHING	
 		`,
-		project.OwnerID,
 		project.Title,
 		project.Slug,
 		project.Description,
@@ -45,18 +43,12 @@ func (r *ProjectRepository) Create(ctx context.Context, project *domain.Project)
 	)
 
 	if err != nil {
-		return fmt.Errorf(
-			"create project: %w",
-			err,
-		)
+		return fmt.Errorf("create project: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf(
-			"get affected rows: %w",
-			err,
-		)
+		return fmt.Errorf("get affected rows: %w", err)
 	}
 
 	if rows == 0 {
@@ -65,145 +57,19 @@ func (r *ProjectRepository) Create(ctx context.Context, project *domain.Project)
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		return fmt.Errorf(
-			"get project id: %w",
-			err,
-		)
+		return fmt.Errorf("get project id: %w", err)
 	}
 
 	project.ID = id
 	created, err := r.ByID(ctx, id)
 
 	if err != nil {
-		return fmt.Errorf(
-			"reload created project: %w",
-			err,
-		)
+		return fmt.Errorf("reload created project: %w", err)
 	}
 
 	*project = *created
 
 	return nil
-}
-
-func (r *ProjectRepository) ByID(ctx context.Context, id int64) (*domain.Project, error) {
-	row := r.db.QueryRowContext(
-		ctx,
-		`
-			SELECT
-				id,
-				owner_id,
-				title,
-				slug,
-				description,
-				status,
-				published_at,
-				created_at,
-				updated_at
-			FROM projects
-			WHERE id = ?	
-		`,
-		id,
-	)
-
-	project, err := scanProject(row)
-
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, domain.ErrProjectNotFound
-		}
-
-		return nil, fmt.Errorf(
-			"get project by id: %w",
-			err,
-		)
-	}
-
-	return project, nil
-}
-
-func (r *ProjectRepository) BySlug(ctx context.Context, slug string) (*domain.Project, error) {
-	row := r.db.QueryRowContext(
-		ctx,
-		`
-			SELECT
-				id,
-				owner_id,
-				title,
-				slug,
-				description,
-				status,
-				published_at,
-				created_at,
-				updated_at
-			FROM projects
-			WHERE slug = ?	
-		`,
-		slug,
-	)
-
-	project, err := scanProject(row)
-
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, domain.ErrProjectNotFound
-		}
-
-		return nil, fmt.Errorf(
-			"get project by slug: %w",
-			err,
-		)
-	}
-
-	return project, nil
-}
-
-func (r *ProjectRepository) ListByOwner(ctx context.Context, ownerID int64) ([]*domain.Project, error) {
-	rows, err := r.db.QueryContext(
-		ctx,
-		`
-			SELECT
-				id,
-				owner_id,
-				title,
-				slug,
-				description,
-				status,
-				published_at,
-				created_at,
-				updated_at
-			FROM projects
-			WHERE owner_id = ?
-			ORDER BY created_at DESC, id DESC
-		`,
-		ownerID,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf(
-			"list projects by owner: %w",
-			err,
-		)
-	}
-
-	defer rows.Close()
-	var projects []*domain.Project
-
-	for rows.Next() {
-		project, err := scanProject(rows)
-
-		if err != nil {
-			return nil, fmt.Errorf("scan project: %w", err)
-		}
-
-		projects = append(projects, project)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate projects: %w", err)
-	}
-
-	return projects, nil
 }
 
 func (r *ProjectRepository) Update(ctx context.Context, project *domain.Project) error {
@@ -230,16 +96,13 @@ func (r *ProjectRepository) Update(ctx context.Context, project *domain.Project)
 		project.Slug,
 		project.Description,
 		project.Status,
-		formatNullableTimestamp(
-			project.PublishedAt,
-		),
+		formatNullableTimestamp(project.PublishedAt),
 		project.ID,
 		project.Slug,
 		project.ID,
 	)
-
 	if err != nil {
-		return fmt.Errorf("udpate project: %w", err)
+		return fmt.Errorf("update project: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
@@ -247,6 +110,7 @@ func (r *ProjectRepository) Update(ctx context.Context, project *domain.Project)
 		return fmt.Errorf("get affected rows: %w", err)
 	}
 
+	// Check if project doesn't exist OR if another project owns slug
 	if rows == 0 {
 		_, err := r.ByID(ctx, project.ID)
 
@@ -255,7 +119,7 @@ func (r *ProjectRepository) Update(ctx context.Context, project *domain.Project)
 		}
 
 		if err != nil {
-			return err
+			return fmt.Errorf("check project after failed update: %w", err)
 		}
 
 		return domain.ErrSlugTaken
@@ -296,15 +160,113 @@ func (r *ProjectRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (r *ProjectRepository) ListPublished(
-	ctx context.Context,
-) ([]*domain.Project, error) {
+func (r *ProjectRepository) ByID(ctx context.Context, id int64) (*domain.Project, error) {
+	row := r.db.QueryRowContext(
+		ctx,
+		`
+			SELECT
+				id,
+				title,
+				slug,
+				description,
+				status,
+				published_at,
+				created_at,
+				updated_at
+			FROM projects
+			WHERE id = ?	
+		`,
+		id,
+	)
+
+	project, err := scanProject(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrProjectNotFound
+		}
+
+		return nil, fmt.Errorf("get project by id: %w", err)
+	}
+
+	return project, nil
+}
+
+func (r *ProjectRepository) BySlug(ctx context.Context, slug string) (*domain.Project, error) {
+	row := r.db.QueryRowContext(
+		ctx,
+		`
+			SELECT
+				id,
+				title,
+				slug,
+				description,
+				status,
+				published_at,
+				created_at,
+				updated_at
+			FROM projects
+			WHERE slug = ?	
+		`,
+		slug,
+	)
+
+	project, err := scanProject(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrProjectNotFound
+		}
+
+		return nil, fmt.Errorf("get project by slug: %w", err)
+	}
+
+	return project, nil
+}
+
+func (r *ProjectRepository) List(ctx context.Context) ([]*domain.Project, error) {
 	rows, err := r.db.QueryContext(
 		ctx,
 		`
 			SELECT
 				id,
-				owner_id,
+				title,
+				slug,
+				description,
+				status,
+				published_at,
+				created_at,
+				updated_at
+			FROM projects
+			ORDER BY created_at DESC, id DESC
+		`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list projects: %w", err)
+	}
+	defer rows.Close()
+
+	projects := make([]*domain.Project, 0)
+	for rows.Next() {
+		project, err := scanProject(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan project: %w", err)
+		}
+
+		projects = append(projects, project)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate projects: %w", err)
+	}
+
+	return projects, nil
+}
+
+func (r *ProjectRepository) ListPublished(ctx context.Context) ([]*domain.Project, error) {
+	rows, err := r.db.QueryContext(
+		ctx,
+		`
+			SELECT
+				id,
 				title,
 				slug,
 				description,
@@ -323,8 +285,7 @@ func (r *ProjectRepository) ListPublished(
 	}
 	defer rows.Close()
 
-	var projects []*domain.Project
-
+	projects := make([]*domain.Project, 0)
 	for rows.Next() {
 		project, err := scanProject(rows)
 		if err != nil {
@@ -341,7 +302,8 @@ func (r *ProjectRepository) ListPublished(
 	return projects, nil
 }
 
-func scanProject(row scanner) (*domain.Project, error) {
+// Misc
+func scanProject(row interface{ Scan(dest ...any) error }) (*domain.Project, error) {
 	var (
 		project     domain.Project
 		publishedAt sql.NullString
@@ -349,9 +311,8 @@ func scanProject(row scanner) (*domain.Project, error) {
 		updatedAt   string
 	)
 
-	err := row.Scan(
+	if err := row.Scan(
 		&project.ID,
-		&project.OwnerID,
 		&project.Title,
 		&project.Slug,
 		&project.Description,
@@ -359,17 +320,12 @@ func scanProject(row scanner) (*domain.Project, error) {
 		&publishedAt,
 		&createdAt,
 		&updatedAt,
-	)
-
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
 
 	if publishedAt.Valid {
-		value, err := parseTimestamp(
-			publishedAt.String,
-		)
-
+		value, err := parseTimestamp(publishedAt.String)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"parse published_at: %w",
@@ -380,30 +336,16 @@ func scanProject(row scanner) (*domain.Project, error) {
 		project.PublishedAt = &value
 	}
 
-	var errCreated error
+	var err error
 
-	project.CreatedAt, errCreated = parseTimestamp(
-		createdAt,
-	)
-
-	if errCreated != nil {
-		return nil, fmt.Errorf(
-			"parse created_at: %w",
-			errCreated,
-		)
+	project.CreatedAt, err = parseTimestamp(createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse created_at: %w", err)
 	}
 
-	var errUpdated error
-
-	project.UpdatedAt, errUpdated = parseTimestamp(
-		updatedAt,
-	)
-
-	if errUpdated != nil {
-		return nil, fmt.Errorf(
-			"parse updated_at: %w",
-			errUpdated,
-		)
+	project.UpdatedAt, err = parseTimestamp(updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse updated_at: %w", err)
 	}
 
 	return &project, nil

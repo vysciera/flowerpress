@@ -33,8 +33,6 @@ type projectResponse struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
-type projectLifecycleAction func(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error)
-
 func projectToResponse(project *domain.Project) projectResponse {
 	return projectResponse{
 		ID:          project.ID,
@@ -54,21 +52,6 @@ func projectIDFromRequest(r *http.Request) (int64, error) {
 
 // !!Server methods
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
-	user, ok := userFromContext(
-		r.Context(),
-	)
-
-	if !ok {
-		writeJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "authenticated user missing",
-			},
-		)
-		return
-	}
-
 	var request createProjectRequest
 
 	if !decodeJSON(w, r, &request) {
@@ -77,7 +60,6 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 
 	project, err := s.projects.Create(
 		r.Context(),
-		user.ID,
 		request.Title,
 		request.Description,
 	)
@@ -113,82 +95,9 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
-	user, ok := userFromContext(r.Context())
-	if !ok {
-		writeJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "authenticated user missing",
-			},
-		)
-		return
-	}
-
-	projectID, err := projectIDFromRequest(r)
-	if err != nil || projectID <= 0 {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid project id",
-			},
-		)
-		return
-	}
-
-	err = s.projects.Delete(
-		r.Context(),
-		user.ID,
-		projectID,
-	)
-
-	switch {
-	case errors.Is(err, domain.ErrProjectNotFound):
-		writeJSON(
-			w,
-			http.StatusNotFound,
-			map[string]string{
-				"error": "project not found",
-			},
-		)
-		return
-
-	case err != nil:
-		writeJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "internal server error",
-			},
-		)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
-	user, ok := userFromContext(
+	projects, err := s.projects.List(
 		r.Context(),
-	)
-
-	if !ok {
-		writeJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "authenticated user missing",
-			},
-		)
-
-		return
-	}
-
-	projects, err := s.projects.ListByOwner(
-		r.Context(),
-		user.ID,
 	)
 
 	if err != nil {
@@ -212,21 +121,6 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
-	user, ok := userFromContext(
-		r.Context(),
-	)
-
-	if !ok {
-		writeJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "authenticated user missing",
-			},
-		)
-		return
-	}
-
 	projectID, err := projectIDFromRequest(r)
 	if err != nil || projectID <= 0 {
 		writeJSON(
@@ -241,7 +135,6 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 
 	project, err := s.projects.ByID(
 		r.Context(),
-		user.ID,
 		projectID,
 	)
 
@@ -275,21 +168,6 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
-	user, ok := userFromContext(
-		r.Context(),
-	)
-
-	if !ok {
-		writeJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "authenticated user missing",
-			},
-		)
-		return
-	}
-
 	projectID, err := projectIDFromRequest(r)
 	if err != nil || projectID <= 0 {
 		writeJSON(
@@ -310,7 +188,6 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 
 	project, err := s.projects.Update(
 		r.Context(),
-		user.ID,
 		projectID,
 		request.Title,
 		request.Description,
@@ -353,6 +230,49 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		http.StatusOK,
 		projectToResponse(project),
 	)
+}
+
+func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
+	projectID, err := projectIDFromRequest(r)
+	if err != nil || projectID <= 0 {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid project id",
+			},
+		)
+		return
+	}
+
+	err = s.projects.Delete(
+		r.Context(),
+		projectID,
+	)
+
+	switch {
+	case errors.Is(err, domain.ErrProjectNotFound):
+		writeJSON(
+			w,
+			http.StatusNotFound,
+			map[string]string{
+				"error": "project not found",
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handlePublicProject(w http.ResponseWriter, r *http.Request) {
@@ -434,19 +354,9 @@ func (s *Server) handlePublicProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 // !Project lifecycle handling
-func (s *Server) handleProjectLifecycle(w http.ResponseWriter, r *http.Request, action projectLifecycleAction) {
-	user, ok := userFromContext(r.Context())
-	if !ok {
-		writeJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "authenticated user missing",
-			},
-		)
-		return
-	}
+type projectLifecycleAction func(ctx context.Context, projectID int64) (*domain.Project, error)
 
+func (s *Server) handleProjectLifecycle(w http.ResponseWriter, r *http.Request, action projectLifecycleAction) {
 	projectID, err := projectIDFromRequest(r)
 	if err != nil || projectID <= 0 {
 		writeJSON(
@@ -461,7 +371,6 @@ func (s *Server) handleProjectLifecycle(w http.ResponseWriter, r *http.Request, 
 
 	project, err := action(
 		r.Context(),
-		user.ID,
 		projectID,
 	)
 

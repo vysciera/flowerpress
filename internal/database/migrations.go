@@ -58,7 +58,6 @@ var migrations = []Migration{
 		SQL: `
 			CREATE TABLE projects (
 				id INTEGER PRIMARY KEY,
-				owner_id INTEGER NOT NULL,
 
 				title TEXT NOT NULL,
 				slug TEXT NOT NULL UNIQUE,
@@ -69,10 +68,6 @@ var migrations = []Migration{
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-				FOREIGN KEY (owner_id)
-					REFERENCES users(id)
-					ON DELETE CASCADE,
-
 				CHECK (
 					status IN (
 						'draft',
@@ -82,9 +77,6 @@ var migrations = []Migration{
 					)
 				)
 			);
-
-			CREATE INDEX idx_projects_owner_id
-				ON projects(owner_id);
 
 			CREATE INDEX idx_projects_status
 				ON projects(status);
@@ -99,13 +91,12 @@ var migrations = []Migration{
 		SQL: `
 		CREATE TABLE media_assets (
 			id INTEGER PRIMARY KEY,
-			owner_id INTEGER NOT NULL,
 
 			storage_key TEXT NOT NULL UNIQUE,
 			original_name TEXT NOT NULL,
 			mime_type TEXT NOT NULL,
 			size_bytes INTEGER NOT NULL,
-			sha256 TEXT NOT NULL,
+			sha256 TEXT NOT NULL UNIQUE,
 
 			width INTEGER,
 			height INTEGER,
@@ -113,21 +104,10 @@ var migrations = []Migration{
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-			FOREIGN KEY (owner_id)
-				REFERENCES users(id)
-				ON DELETE CASCADE,
-
 			CHECK (size_bytes >= 0),
 			CHECK (width IS NULL OR width > 0),
 			CHECK (height IS NULL OR height > 0)
 		);
-
-		CREATE INDEX idx_media_assets_owner_id
-			ON media_assets(owner_id);
-
-		CREATE INDEX idx_media_assets_sha256
-			ON media_assets(sha256);
-
 
 		CREATE TABLE media_placements (
 			id INTEGER PRIMARY KEY,
@@ -237,7 +217,9 @@ func applyMigration(db *sql.DB, migration Migration) error {
 		return err
 	}
 
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
 	if _, err := tx.Exec(migration.SQL); err != nil {
 		return err

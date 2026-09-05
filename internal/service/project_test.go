@@ -9,35 +9,21 @@ import (
 	"flowerpress/internal/store/turso"
 )
 
-func testProjectService(t *testing.T) (*ProjectService, *domain.User) {
+func testProjectService(t *testing.T) *ProjectService {
 	t.Helper()
 
 	db := testDatabase(t)
+	repo := turso.NewProjectRepository(db)
 
-	users := turso.NewUserRepository(db)
-	projects := turso.NewProjectRepository(db)
-
-	user := &domain.User{
-		Username:     "flower",
-		PasswordHash: "flowerhash",
-	}
-
-	if err := users.Create(
-		context.Background(),
-		user,
-	); err != nil {
-		t.Fatalf("create test user: %v", err)
-	}
-
-	return NewProjectService(projects), user
+	return NewProjectService(repo)
 }
 
 func TestProjectServiceCreate(t *testing.T) {
-	projects, user := testProjectService(t)
+	projects := testProjectService(t)
+	ctx := context.Background()
 
 	project, err := projects.Create(
-		context.Background(),
-		user.ID,
+		ctx,
 		"Flower Press",
 		"Personal archive",
 	)
@@ -48,10 +34,6 @@ func TestProjectServiceCreate(t *testing.T) {
 
 	if project.ID == 0 {
 		t.Fatal("expected project ID")
-	}
-
-	if project.OwnerID != user.ID {
-		t.Fatalf("expected owner ID %d, got %d", user.ID, project.OwnerID)
 	}
 
 	if project.Title != "Flower Press" {
@@ -65,14 +47,17 @@ func TestProjectServiceCreate(t *testing.T) {
 	if project.Status != domain.ProjectStatusDraft {
 		t.Fatalf("expected draft status, got %q", project.Status)
 	}
+
+	if project.PublishedAt != nil {
+		t.Fatalf("expected nil PublishedAt, got %v", project.PublishedAt)
+	}
 }
 
 func TestProjectServiceCreateRequiresTitle(t *testing.T) {
-	projects, user := testProjectService(t)
+	projects := testProjectService(t)
 
 	_, err := projects.Create(
 		context.Background(),
-		user.ID,
 		"   ",
 		"description",
 	)
@@ -83,15 +68,13 @@ func TestProjectServiceCreateRequiresTitle(t *testing.T) {
 }
 
 func TestProjectServiceCreateNormalizesSlug(t *testing.T) {
-	projects, user := testProjectService(t)
+	projects := testProjectService(t)
 
 	project, err := projects.Create(
 		context.Background(),
-		user.ID,
-		"  New      Origami:    2026!     ",
+		"  New   Origami: 2026!  ",
 		"",
 	)
-
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
@@ -105,13 +88,12 @@ func TestProjectServiceCreateNormalizesSlug(t *testing.T) {
 	}
 }
 
-func TestProjectSErviceCreateResolvesDuplicateSlugs(t *testing.T) {
-	projects, user := testProjectService(t)
+func TestProjectServiceCreateSequencesDuplicateSlugs(t *testing.T) {
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	first, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -121,7 +103,6 @@ func TestProjectSErviceCreateResolvesDuplicateSlugs(t *testing.T) {
 
 	second, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -131,7 +112,6 @@ func TestProjectSErviceCreateResolvesDuplicateSlugs(t *testing.T) {
 
 	third, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -140,25 +120,36 @@ func TestProjectSErviceCreateResolvesDuplicateSlugs(t *testing.T) {
 	}
 
 	if first.Slug != "flowerpress" {
-		t.Fatalf("expected first slug %q, got %q", "flowerpress", first.Slug)
+		t.Fatalf(
+			"expected first slug %q, got %q",
+			"flowerpress",
+			first.Slug,
+		)
 	}
 
 	if second.Slug != "flowerpress-2" {
-		t.Fatalf("expected second slug %q, got %q", "flowerpress-2", second.Slug)
+		t.Fatalf(
+			"expected second slug %q, got %q",
+			"flowerpress-2",
+			second.Slug,
+		)
 	}
 
 	if third.Slug != "flowerpress-3" {
-		t.Fatalf("expected third slug %q, got %q", "flowerpress-3", third.Slug)
+		t.Fatalf(
+			"expected third slug %q, got %q",
+			"flowerpress-3",
+			third.Slug,
+		)
 	}
 }
 
 func TestProjectServiceUpdate(t *testing.T) {
-	projects, user := testProjectService(t)
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	project, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"Old description",
 	)
@@ -170,7 +161,6 @@ func TestProjectServiceUpdate(t *testing.T) {
 
 	updated, err := projects.Update(
 		ctx,
-		user.ID,
 		project.ID,
 		"Flowerpress Archive",
 		"New Description",
@@ -193,12 +183,11 @@ func TestProjectServiceUpdate(t *testing.T) {
 }
 
 func TestProjectServiceUpdateRequiresTitle(t *testing.T) {
-	projects, user := testProjectService(t)
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	project, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -208,7 +197,6 @@ func TestProjectServiceUpdateRequiresTitle(t *testing.T) {
 
 	_, err = projects.Update(
 		ctx,
-		user.ID,
 		project.ID,
 		"   ",
 		"description",
@@ -219,48 +207,13 @@ func TestProjectServiceUpdateRequiresTitle(t *testing.T) {
 	}
 }
 
-func TestProjectServiceUpdateRejectsDifferentOwner(t *testing.T) {
-	db := testDatabase(t)
+func TestProjectServiceUpdateNotFound(t *testing.T) {
+	projects := testProjectService(t)
 
-	users := turso.NewUserRepository(db)
-	repo := turso.NewProjectRepository(db)
-	projects := NewProjectService(repo)
-
-	ctx := context.Background()
-
-	owner := &domain.User{
-		Username:     "flower",
-		PasswordHash: "flowerhash",
-	}
-
-	other := &domain.User{
-		Username:     "garden",
-		PasswordHash: "gardenhash",
-	}
-
-	if err := users.Create(ctx, owner); err != nil {
-		t.Fatalf("create owner: %v", err)
-	}
-
-	if err := users.Create(ctx, other); err != nil {
-		t.Fatalf("create other user: %v", err)
-	}
-
-	project, err := projects.Create(
-		ctx,
-		owner.ID,
-		"Flowerpress",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	_, err = projects.Update(
-		ctx,
-		other.ID,
-		project.ID,
-		"Changed",
+	_, err := projects.Update(
+		context.Background(),
+		999,
+		"Missing",
 		"",
 	)
 
@@ -270,12 +223,11 @@ func TestProjectServiceUpdateRejectsDifferentOwner(t *testing.T) {
 }
 
 func TestProjectServicePublish(t *testing.T) {
-	projects, user := testProjectService(t)
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	project, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -283,11 +235,7 @@ func TestProjectServicePublish(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	published, err := projects.Publish(
-		ctx,
-		user.ID,
-		project.ID,
-	)
+	published, err := projects.Publish(ctx, project.ID)
 	if err != nil {
 		t.Fatalf("publish project: %v", err)
 	}
@@ -301,13 +249,12 @@ func TestProjectServicePublish(t *testing.T) {
 	}
 }
 
-func TestProjectServiceUnpublish(t *testing.T) {
-	projects, user := testProjectService(t)
+func TestProjectServicePublishIsIdempotent(t *testing.T) {
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	project, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -315,22 +262,50 @@ func TestProjectServiceUnpublish(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	project, err = projects.Publish(
+	first, err := projects.Publish(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+
+	second, err := projects.Publish(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("second publish: %v", err)
+	}
+
+	if first.PublishedAt == nil || second.PublishedAt == nil {
+		t.Fatal("expected PublishedAt")
+	}
+
+	if !first.PublishedAt.Equal(*second.PublishedAt) {
+		t.Fatalf(
+			"expected PublishedAt to remain unchanged: %v != %v",
+			first.PublishedAt,
+			second.PublishedAt,
+		)
+	}
+}
+
+func TestProjectServiceUnpublish(t *testing.T) {
+	projects := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
 		ctx,
-		user.ID,
-		project.ID,
+		"Flowerpress",
+		"",
 	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Publish(ctx, project.ID)
 	if err != nil {
 		t.Fatalf("publish project: %v", err)
 	}
 
 	publishedAt := project.PublishedAt
 
-	project, err = projects.Unpublish(
-		ctx,
-		user.ID,
-		project.ID,
-	)
+	project, err = projects.Unpublish(ctx, project.ID)
 	if err != nil {
 		t.Fatalf("unpublish project: %v", err)
 	}
@@ -348,217 +323,12 @@ func TestProjectServiceUnpublish(t *testing.T) {
 	}
 }
 
-func TestProjectServiceArchive(t *testing.T) {
-	projects, user := testProjectService(t)
-	ctx := context.Background()
-
-	project, err := projects.Create(
-		ctx,
-		user.ID,
-		"Flowerpress",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("Create project: %v", err)
-	}
-
-	project, err = projects.Archive(
-		ctx,
-		user.ID,
-		project.ID,
-	)
-	if err != nil {
-		t.Fatalf("archive project: %v", err)
-	}
-
-	if project.Status != domain.ProjectStatusArchived {
-		t.Fatalf("expected status %q, got %q", domain.ProjectStatusArchived, project.Status)
-	}
-}
-
-func TestProjectServiceCannotPublishArchivedProject(t *testing.T) {
-	projects, user := testProjectService(t)
-	ctx := context.Background()
-
-	project, err := projects.Create(
-		ctx,
-		user.ID,
-		"Flowerpress",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	project, err = projects.Archive(
-		ctx,
-		user.ID,
-		project.ID,
-	)
-	if err != nil {
-		t.Fatalf("archive project: %v", err)
-	}
-
-	_, err = projects.Publish(
-		ctx,
-		user.ID,
-		project.ID,
-	)
-
-	if !errors.Is(err, ErrInvalidProjectTransition) {
-		t.Fatalf("expected ErrInvalidProjectTransition, got %v", err)
-	}
-}
-
-func TestProjectServiceByID(t *testing.T) {
-	projects, user := testProjectService(t)
-	ctx := context.Background()
-
-	created, err := projects.Create(
-		ctx,
-		user.ID,
-		"Flowerpress",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	found, err := projects.ByID(ctx, user.ID, created.ID)
-	if err != nil {
-		t.Fatalf("find projects: %v", err)
-	}
-
-	if found.ID != created.ID {
-		t.Fatalf("expected project ID %d, got %d", created.ID, found.ID)
-	}
-}
-
-func TestProjectServiceByIDRejectsDifferentOwner(t *testing.T) {
-	db := testDatabase(t)
-
-	users := turso.NewUserRepository(db)
-	repo := turso.NewProjectRepository(db)
-	projects := NewProjectService(repo)
-
-	ctx := context.Background()
-
-	owner := &domain.User{
-		Username:     "flower",
-		PasswordHash: "flowerhash",
-	}
-
-	other := &domain.User{
-		Username:     "garden",
-		PasswordHash: "gardenhash",
-	}
-
-	if err := users.Create(ctx, owner); err != nil {
-		t.Fatalf("create owner: %v", err)
-	}
-
-	if err := users.Create(ctx, other); err != nil {
-		t.Fatalf("create other user: %v", err)
-	}
-
-	project, err := projects.Create(
-		ctx,
-		owner.ID,
-		"Flowerpress",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	_, err = projects.ByID(ctx, other.ID, project.ID)
-
-	if !errors.Is(err, domain.ErrProjectNotFound) {
-		t.Fatalf("expected ErrProjectNotFound, got %q", err)
-	}
-}
-
-func TestProjectServiceListByOwner(t *testing.T) {
-	projects, user := testProjectService(t)
-	ctx := context.Background()
-
-	for _, title := range []string{"First", "Second", "Third"} {
-		if _, err := projects.Create(
-			ctx,
-			user.ID,
-			title,
-			"",
-		); err != nil {
-			t.Fatalf("create project %q: %v", title, err)
-		}
-	}
-
-	found, err := projects.ListByOwner(ctx, user.ID)
-	if err != nil {
-		t.Fatalf("list projects: %v", err)
-	}
-
-	if len(found) != 3 {
-		t.Fatalf("expected 3 projects, got %d", err)
-	}
-}
-
-func TestProjectServiceByPublicSlugRejectsDraft(t *testing.T) {
-	projects, user := testProjectService(t)
-	ctx := context.Background()
-
-	project, err := projects.Create(
-		ctx,
-		user.ID,
-		"Flowerpress",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	_, err = projects.ByPublicSlug(ctx, project.Slug)
-	if !errors.Is(err, domain.ErrProjectNotFound) {
-		t.Fatalf("expected ErrProjectNotFound, got %v", err)
-	}
-}
-
-func TestProjectSErviceByPublicSlugPublished(t *testing.T) {
-	projects, user := testProjectService(t)
-	ctx := context.Background()
-
-	project, err := projects.Create(
-		ctx,
-		user.ID,
-		"Flowerpress",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-
-	project, err = projects.Publish(ctx, user.ID, project.ID)
-	if err != nil {
-		t.Fatalf("publish project: %v", err)
-	}
-
-	found, err := projects.ByPublicSlug(ctx, project.Slug)
-	if err != nil {
-		t.Fatalf("find public project: %v", err)
-	}
-
-	if found.ID != project.ID {
-		t.Fatalf("expected project ID %d, got %d", project.ID, found.ID)
-	}
-}
-
 func TestProjectServiceUnlist(t *testing.T) {
-	projects, user := testProjectService(t)
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	project, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -566,7 +336,7 @@ func TestProjectServiceUnlist(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	project, err = projects.Unlist(ctx, user.ID, project.ID)
+	project, err = projects.Unlist(ctx, project.ID)
 	if err != nil {
 		t.Fatalf("unlist project: %v", err)
 	}
@@ -581,12 +351,11 @@ func TestProjectServiceUnlist(t *testing.T) {
 }
 
 func TestProjectServiceUnlistPreservesPublishedAt(t *testing.T) {
-	projects, user := testProjectService(t)
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	project, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -594,14 +363,14 @@ func TestProjectServiceUnlistPreservesPublishedAt(t *testing.T) {
 		t.Fatalf("create proejct: %v", err)
 	}
 
-	project, err = projects.Publish(ctx, user.ID, project.ID)
+	project, err = projects.Publish(ctx, project.ID)
 	if err != nil {
 		t.Fatalf("publish project: %v", err)
 	}
 
 	publishedAt := *project.PublishedAt
 
-	project, err = projects.Unlist(ctx, user.ID, project.ID)
+	project, err = projects.Unlist(ctx, project.ID)
 	if err != nil {
 		t.Fatalf("unlist project: %v", err)
 	}
@@ -615,13 +384,35 @@ func TestProjectServiceUnlistPreservesPublishedAt(t *testing.T) {
 	}
 }
 
-func TestProjectServiceCannotUnlistArchivedProject(t *testing.T) {
-	projects, user := testProjectService(t)
+func TestProjectServiceArchive(t *testing.T) {
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	project, err := projects.Create(
 		ctx,
-		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("Create project: %v", err)
+	}
+
+	project, err = projects.Archive(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("archive project: %v", err)
+	}
+
+	if project.Status != domain.ProjectStatusArchived {
+		t.Fatalf("expected status %q, got %q", domain.ProjectStatusArchived, project.Status)
+	}
+}
+
+func TestProjectServiceCannotPublishArchivedProject(t *testing.T) {
+	projects := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
 		"Flowerpress",
 		"",
 	)
@@ -629,24 +420,23 @@ func TestProjectServiceCannotUnlistArchivedProject(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	project, err = projects.Archive(ctx, user.ID, project.ID)
+	project, err = projects.Archive(ctx, project.ID)
 	if err != nil {
 		t.Fatalf("archive project: %v", err)
 	}
 
-	_, err = projects.Unlist(ctx, user.ID, project.ID)
+	_, err = projects.Publish(ctx, project.ID)
 	if !errors.Is(err, ErrInvalidProjectTransition) {
 		t.Fatalf("expected ErrInvalidProjectTransition, got %v", err)
 	}
 }
 
-func TestProjectServiceByPublicSlugUnlisted(t *testing.T) {
-	projects, user := testProjectService(t)
+func TestProjectServiceCannotUnpublishArchivedProject(t *testing.T) {
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	project, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -654,7 +444,95 @@ func TestProjectServiceByPublicSlugUnlisted(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	project, err = projects.Unlist(ctx, user.ID, project.ID)
+	if _, err := projects.Archive(ctx, project.ID); err != nil {
+		t.Fatalf("archive project: %v", err)
+	}
+
+	_, err = projects.Unpublish(ctx, project.ID)
+	if !errors.Is(err, ErrInvalidProjectTransition) {
+		t.Fatalf(
+			"expected ErrInvalidProjectTransition, got %v",
+			err,
+		)
+	}
+}
+
+func TestProjectServiceArchivePreservesPublishedAt(t *testing.T) {
+	projects := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Publish(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("publish project: %v", err)
+	}
+
+	publishedAt := *project.PublishedAt
+
+	project, err = projects.Archive(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("archive project: %v", err)
+	}
+
+	if project.PublishedAt == nil {
+		t.Fatal("expected PublishedAt to be preserved")
+	}
+
+	if !project.PublishedAt.Equal(publishedAt) {
+		t.Fatal("expected PublishedAt to remain unchanged")
+	}
+}
+
+func TestProjectServiceByPublicSlugPublished(t *testing.T) {
+	projects := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Publish(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("publish project: %v", err)
+	}
+
+	found, err := projects.ByPublicSlug(ctx, project.Slug)
+	if err != nil {
+		t.Fatalf("find public project: %v", err)
+	}
+
+	if found.ID != project.ID {
+		t.Fatalf("expected project ID %d, got %d", project.ID, found.ID)
+	}
+}
+
+func TestProjectServiceByPublicSlugUnlisted(t *testing.T) {
+	projects := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Unlist(ctx, project.ID)
 	if err != nil {
 		t.Fatalf("unlist project: %v", err)
 	}
@@ -669,13 +547,12 @@ func TestProjectServiceByPublicSlugUnlisted(t *testing.T) {
 	}
 }
 
-func TestProjectServiceDelete(t *testing.T) {
-	projects, user := testProjectService(t)
+func TestProjectServiceByPublicSlugHidesDraft(t *testing.T) {
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	project, err := projects.Create(
 		ctx,
-		user.ID,
 		"Flowerpress",
 		"",
 	)
@@ -683,58 +560,18 @@ func TestProjectServiceDelete(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	if err := projects.Delete(
-		ctx,
-		user.ID,
-		project.ID,
-	); err != nil {
-		t.Fatalf("delete project: %v", err)
-	}
-
-	_, err = projects.ByID(
-		ctx,
-		user.ID,
-		project.ID,
-	)
-
+	_, err = projects.ByPublicSlug(ctx, project.Slug)
 	if !errors.Is(err, domain.ErrProjectNotFound) {
-		t.Fatalf(
-			"expected ErrProjectNotFound, got %v",
-			err,
-		)
+		t.Fatalf("expected ErrProjectNotFound, got %v", err)
 	}
 }
 
-func TestProjectServiceDeleteRejectsDifferentOwner(t *testing.T) {
-	db := testDatabase(t)
-
-	users := turso.NewUserRepository(db)
-	repo := turso.NewProjectRepository(db)
-	projects := NewProjectService(repo)
-
+func TestProjectServiceByPublicSlugHidesArchived(t *testing.T) {
+	projects := testProjectService(t)
 	ctx := context.Background()
-
-	owner := &domain.User{
-		Username:     "flower",
-		PasswordHash: "flowerhash",
-	}
-
-	other := &domain.User{
-		Username:     "garden",
-		PasswordHash: "gardenhash",
-	}
-
-	if err := users.Create(ctx, owner); err != nil {
-		t.Fatalf("create owner: %v", err)
-	}
-
-	if err := users.Create(ctx, other); err != nil {
-		t.Fatalf("create other user: %v", err)
-	}
 
 	project, err := projects.Create(
 		ctx,
-		owner.ID,
 		"Flowerpress",
 		"",
 	)
@@ -742,27 +579,22 @@ func TestProjectServiceDeleteRejectsDifferentOwner(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	err = projects.Delete(
-		ctx,
-		other.ID,
-		project.ID,
-	)
+	if _, err := projects.Archive(ctx, project.ID); err != nil {
+		t.Fatalf("archive project: %v", err)
+	}
 
+	_, err = projects.ByPublicSlug(ctx, project.Slug)
 	if !errors.Is(err, domain.ErrProjectNotFound) {
-		t.Fatalf(
-			"expected ErrProjectNotFound, got %v",
-			err,
-		)
+		t.Fatalf("expected ErrProjectNotFound, got %v", err)
 	}
 }
 
 func TestProjectServiceListPublic(t *testing.T) {
-	projects, user := testProjectService(t)
+	projects := testProjectService(t)
 	ctx := context.Background()
 
 	first, err := projects.Create(
 		ctx,
-		user.ID,
 		"First",
 		"",
 	)
@@ -772,7 +604,6 @@ func TestProjectServiceListPublic(t *testing.T) {
 
 	second, err := projects.Create(
 		ctx,
-		user.ID,
 		"Second",
 		"",
 	)
@@ -782,7 +613,6 @@ func TestProjectServiceListPublic(t *testing.T) {
 
 	third, err := projects.Create(
 		ctx,
-		user.ID,
 		"Third",
 		"",
 	)
@@ -792,7 +622,6 @@ func TestProjectServiceListPublic(t *testing.T) {
 
 	if _, err := projects.Publish(
 		ctx,
-		user.ID,
 		first.ID,
 	); err != nil {
 		t.Fatalf("publish first project: %v", err)
@@ -800,7 +629,6 @@ func TestProjectServiceListPublic(t *testing.T) {
 
 	if _, err := projects.Unlist(
 		ctx,
-		user.ID,
 		second.ID,
 	); err != nil {
 		t.Fatalf("unlist second project: %v", err)
@@ -808,7 +636,6 @@ func TestProjectServiceListPublic(t *testing.T) {
 
 	if _, err := projects.Archive(
 		ctx,
-		user.ID,
 		third.ID,
 	); err != nil {
 		t.Fatalf("archive third project: %v", err)
@@ -825,5 +652,125 @@ func TestProjectServiceListPublic(t *testing.T) {
 
 	if found[0].ID != first.ID {
 		t.Fatalf("expected project ID %d, got %d", first.ID, found[0].ID)
+	}
+}
+
+func TestProjectServiceDelete(t *testing.T) {
+	projects := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	if err := projects.Delete(ctx, project.ID); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+
+	_, err = projects.ByID(ctx, project.ID)
+	if !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Fatalf("expected ErrProjectNotFound, got %v", err)
+	}
+}
+
+func TestProjectServiceDeleteNotFound(t *testing.T) {
+	projects := testProjectService(t)
+
+	err := projects.Delete(
+		context.Background(),
+		999,
+	)
+
+	if !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Fatalf("expected ErrProjectNotFound, got %v", err)
+	}
+}
+
+func TestProjectServiceCannotUnlistArchivedProject(t *testing.T) {
+	projects := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	project, err = projects.Archive(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("archive project: %v", err)
+	}
+
+	_, err = projects.Unlist(ctx, project.ID)
+	if !errors.Is(err, ErrInvalidProjectTransition) {
+		t.Fatalf("expected ErrInvalidProjectTransition, got %v", err)
+	}
+}
+
+func TestProjectServiceByID(t *testing.T) {
+	projects := testProjectService(t)
+	ctx := context.Background()
+
+	created, err := projects.Create(
+		ctx,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	found, err := projects.ByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("find projects: %v", err)
+	}
+
+	if found.ID != created.ID {
+		t.Fatalf("expected project ID %d, got %d", created.ID, found.ID)
+	}
+}
+
+func TestProjectServiceByIDNotFound(t *testing.T) {
+	projects := testProjectService(t)
+
+	_, err := projects.ByID(
+		context.Background(),
+		999,
+	)
+
+	if !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Fatalf("expected ErrProjectNotFound, got %v", err)
+	}
+}
+
+func TestProjectServiceList(t *testing.T) {
+	projects := testProjectService(t)
+	ctx := context.Background()
+
+	for _, title := range []string{"First", "Second", "Third"} {
+		if _, err := projects.Create(
+			ctx,
+			title,
+			"",
+		); err != nil {
+			t.Fatalf("create project %q: %v", title, err)
+		}
+	}
+
+	found, err := projects.List(ctx)
+	if err != nil {
+		t.Fatalf("list projects: %v", err)
+	}
+
+	if len(found) != 3 {
+		t.Fatalf("expected 3 projects, got %d", len(found))
 	}
 }

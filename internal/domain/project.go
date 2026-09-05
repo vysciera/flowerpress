@@ -13,7 +13,6 @@ const (
 
 type Project struct {
 	ID          int64 // Nine quintillion users on a single user application
-	OwnerID     int64 // Same here
 	Title       string
 	Slug        string
 	Description string

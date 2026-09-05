@@ -92,7 +92,10 @@ func TestDeleteProject(t *testing.T) {
 
 	request.AddCookie(cookie)
 	response := httptest.NewRecorder()
+
+	t.Log("sending DELETE")
 	server.Handler().ServeHTTP(response, request)
+	t.Log("DELETE finished")
 
 	if response.Code != http.StatusNoContent {
 		t.Fatalf(
@@ -114,7 +117,10 @@ func TestDeleteProject(t *testing.T) {
 
 	get.AddCookie(cookie)
 	getResponse := httptest.NewRecorder()
+
+	t.Log("sending verification GET")
 	server.Handler().ServeHTTP(getResponse, get)
+	t.Log("GET finished")
 
 	if getResponse.Code != http.StatusNotFound {
 		t.Fatalf(
