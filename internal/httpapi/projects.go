@@ -403,6 +403,36 @@ func (s *Server) handlePublicProject(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
+func (s *Server) handlePublicProjects(w http.ResponseWriter, r *http.Request) {
+	projects, err := s.projects.ListPublic(r.Context())
+	if err != nil {
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	response := make(
+		[]projectResponse,
+		0,
+		len(projects),
+	)
+
+	for _, project := range projects {
+		response = append(response, projectToResponse(project))
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		response,
+	)
+}
+
 // !Project lifecycle handling
 func (s *Server) handleProjectLifecycle(w http.ResponseWriter, r *http.Request, action projectLifecycleAction) {
 	user, ok := userFromContext(r.Context())

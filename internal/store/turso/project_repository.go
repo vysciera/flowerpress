@@ -296,6 +296,51 @@ func (r *ProjectRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+func (r *ProjectRepository) ListPublished(
+	ctx context.Context,
+) ([]*domain.Project, error) {
+	rows, err := r.db.QueryContext(
+		ctx,
+		`
+			SELECT
+				id,
+				owner_id,
+				title,
+				slug,
+				description,
+				status,
+				published_at,
+				created_at,
+				updated_at
+			FROM projects
+			WHERE status = ?
+			ORDER BY published_at DESC, id DESC
+		`,
+		domain.ProjectStatusPublished,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list published projects: %w", err)
+	}
+	defer rows.Close()
+
+	var projects []*domain.Project
+
+	for rows.Next() {
+		project, err := scanProject(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan published project: %w", err)
+		}
+
+		projects = append(projects, project)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate published projects: %w", err)
+	}
+
+	return projects, nil
+}
+
 func scanProject(row scanner) (*domain.Project, error) {
 	var (
 		project     domain.Project

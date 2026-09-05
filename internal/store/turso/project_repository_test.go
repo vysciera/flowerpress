@@ -436,3 +436,71 @@ func TestProjectRepositoryDeleteNotFound(t *testing.T) {
 		)
 	}
 }
+
+func TestProjectRepositoryListPublished(t *testing.T) {
+	repo, user := testProjectRepository(t)
+	ctx := context.Background()
+
+	draft := &domain.Project{
+		OwnerID: user.ID,
+		Title:   "Draft",
+		Slug:    "draft",
+		Status:  domain.ProjectStatusDraft,
+	}
+
+	published := &domain.Project{
+		OwnerID: user.ID,
+		Title:   "Published",
+		Slug:    "published",
+		Status:  domain.ProjectStatusPublished,
+	}
+
+	unlisted := &domain.Project{
+		OwnerID: user.ID,
+		Title:   "Unlisted",
+		Slug:    "unlisted",
+		Status:  domain.ProjectStatusUnlisted,
+	}
+
+	archived := &domain.Project{
+		OwnerID: user.ID,
+		Title:   "Archived",
+		Slug:    "archived",
+		Status:  domain.ProjectStatusArchived,
+	}
+
+	for _, project := range []*domain.Project{
+		draft,
+		published,
+		unlisted,
+		archived,
+	} {
+		if err := repo.Create(ctx, project); err != nil {
+			t.Fatalf(
+				"create project %q: %v",
+				project.Title,
+				err,
+			)
+		}
+	}
+
+	found, err := repo.ListPublished(ctx)
+	if err != nil {
+		t.Fatalf("list published projects: %v", err)
+	}
+
+	if len(found) != 1 {
+		t.Fatalf(
+			"expected 1 project, got %d",
+			len(found),
+		)
+	}
+
+	if found[0].ID != published.ID {
+		t.Fatalf(
+			"expected project ID %d, got %d",
+			published.ID,
+			found[0].ID,
+		)
+	}
+}

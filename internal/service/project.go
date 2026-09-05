@@ -227,6 +227,10 @@ func (s *ProjectService) ByPublicSlug(ctx context.Context, slug string) (*domain
 	}
 }
 
+func (s *ProjectService) ListPublic(ctx context.Context) ([]*domain.Project, error) {
+	return s.projects.ListPublished(ctx)
+}
+
 func (s *ProjectService) projectForOwner(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
 	project, err := s.projects.ByID(ctx, projectID)
 

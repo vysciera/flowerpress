@@ -95,6 +95,11 @@ func (s *Server) routes() {
 		s.handlePublicProject,
 	)
 
+	s.mux.HandleFunc(
+		"GET /api/public/projects",
+		s.handlePublicProjects,
+	)
+
 	// Project Actions
 
 	s.mux.Handle(

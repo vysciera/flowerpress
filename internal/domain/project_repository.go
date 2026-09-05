@@ -19,4 +19,6 @@ type ProjectRepository interface {
 
 	Update(ctx context.Context, project *Project) error
 	Delete(ctx context.Context, id int64) error
+
+	ListPublished(ctx context.Context) ([]*Project, error)
 }

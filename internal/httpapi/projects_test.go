@@ -998,3 +998,129 @@ func TestPublicProjectNotFound(t *testing.T) {
 		)
 	}
 }
+
+func TestPublicProjects(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	published := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Published",
+	)
+
+	unlisted := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Unlisted",
+	)
+
+	draft := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Draft",
+	)
+
+	publishRequest := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/publish",
+			published.ID,
+		),
+		nil,
+	)
+	publishRequest.AddCookie(cookie)
+
+	publishResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		publishResponse,
+		publishRequest,
+	)
+
+	if publishResponse.Code != http.StatusOK {
+		t.Fatalf(
+			"publish project: %d: %s",
+			publishResponse.Code,
+			publishResponse.Body.String(),
+		)
+	}
+
+	unlistRequest := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/unlist",
+			unlisted.ID,
+		),
+		nil,
+	)
+	unlistRequest.AddCookie(cookie)
+
+	unlistResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		unlistResponse,
+		unlistRequest,
+	)
+
+	if unlistResponse.Code != http.StatusOK {
+		t.Fatalf(
+			"unlist project: %d: %s",
+			unlistResponse.Code,
+			unlistResponse.Body.String(),
+		)
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/public/projects",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var found []projectResponse
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&found); err != nil {
+		t.Fatalf(
+			"decode public projects: %v",
+			err,
+		)
+	}
+
+	if len(found) != 1 {
+		t.Fatalf(
+			"expected 1 public project, got %d",
+			len(found),
+		)
+	}
+
+	if found[0].ID != published.ID {
+		t.Fatalf(
+			"expected published project ID %d, got %d",
+			published.ID,
+			found[0].ID,
+		)
+	}
+
+	_ = draft
+}

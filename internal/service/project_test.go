@@ -705,9 +705,7 @@ func TestProjectServiceDelete(t *testing.T) {
 	}
 }
 
-func TestProjectServiceDeleteRejectsDifferentOwner(
-	t *testing.T,
-) {
+func TestProjectServiceDeleteRejectsDifferentOwner(t *testing.T) {
 	db := testDatabase(t)
 
 	users := turso.NewUserRepository(db)
@@ -755,5 +753,77 @@ func TestProjectServiceDeleteRejectsDifferentOwner(
 			"expected ErrProjectNotFound, got %v",
 			err,
 		)
+	}
+}
+
+func TestProjectServiceListPublic(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	first, err := projects.Create(
+		ctx,
+		user.ID,
+		"First",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create first project: %v", err)
+	}
+
+	second, err := projects.Create(
+		ctx,
+		user.ID,
+		"Second",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create second project: %v", err)
+	}
+
+	third, err := projects.Create(
+		ctx,
+		user.ID,
+		"Third",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create third project: %v", err)
+	}
+
+	if _, err := projects.Publish(
+		ctx,
+		user.ID,
+		first.ID,
+	); err != nil {
+		t.Fatalf("publish first project: %v", err)
+	}
+
+	if _, err := projects.Unlist(
+		ctx,
+		user.ID,
+		second.ID,
+	); err != nil {
+		t.Fatalf("unlist second project: %v", err)
+	}
+
+	if _, err := projects.Archive(
+		ctx,
+		user.ID,
+		third.ID,
+	); err != nil {
+		t.Fatalf("archive third project: %v", err)
+	}
+
+	found, err := projects.ListPublic(ctx)
+	if err != nil {
+		t.Fatalf("list public projects: %v", err)
+	}
+
+	if len(found) != 1 {
+		t.Fatalf("expected 1 public project, got %d", len(found))
+	}
+
+	if found[0].ID != first.ID {
+		t.Fatalf("expected project ID %d, got %d", first.ID, found[0].ID)
 	}
 }
