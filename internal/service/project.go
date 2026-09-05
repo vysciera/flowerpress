@@ -26,7 +26,7 @@ func NewProjectService(projects domain.ProjectRepository) *ProjectService {
 	}
 }
 
-func (s *ProjectService) Create(ctx context.Context, ownerID int64, title string, description string) (*domain.Project, error) {
+func (s *ProjectService) Create(ctx context.Context, title string, description string) (*domain.Project, error) {
 	title = strings.TrimSpace(title)
 
 	if title == "" {
@@ -36,24 +36,17 @@ func (s *ProjectService) Create(ctx context.Context, ownerID int64, title string
 	baseSlug := slugify(title)
 
 	project := &domain.Project{
-		OwnerID:     ownerID,
 		Title:       title,
-		Slug:        baseSlug,
 		Description: strings.TrimSpace(description),
 		Status:      domain.ProjectStatusDraft,
 	}
 
 	// Slug sequencing for duplicate titles
 	for suffix := 1; ; suffix++ {
-		if suffix == 1 {
-			project.Slug = baseSlug
-		} else {
-			project.Slug = fmt.Sprintf(
-				"%s-%d",
-				baseSlug,
-				suffix,
-			)
-		}
+		project.Slug = sequencedSlug(
+			baseSlug,
+			suffix,
+		)
 
 		err := s.projects.Create(ctx, project)
 
@@ -67,14 +60,13 @@ func (s *ProjectService) Create(ctx context.Context, ownerID int64, title string
 	}
 }
 
-func (s *ProjectService) Update(ctx context.Context, ownerID int64, projectID int64, title string, description string) (*domain.Project, error) {
+func (s *ProjectService) Update(ctx context.Context, projectID int64, title string, description string) (*domain.Project, error) {
 	title = strings.TrimSpace(title)
-
 	if title == "" {
 		return nil, ErrProjectTitleRequired
 	}
 
-	project, err := s.projectForOwner(ctx, ownerID, projectID)
+	project, err := s.projects.ByID(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,8 +81,8 @@ func (s *ProjectService) Update(ctx context.Context, ownerID int64, projectID in
 	return project, nil
 }
 
-func (s *ProjectService) Delete(ctx context.Context, ownerID int64, projectID int64) error {
-	project, err := s.projectForOwner(ctx, ownerID, projectID)
+func (s *ProjectService) Delete(ctx context.Context, projectID int64) error {
+	project, err := s.projects.ByID(ctx, projectID)
 	if err != nil {
 		return err
 	}
@@ -98,20 +90,21 @@ func (s *ProjectService) Delete(ctx context.Context, ownerID int64, projectID in
 	return s.projects.Delete(ctx, project.ID)
 }
 
-func (s *ProjectService) Publish(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
-	project, err := s.projectForOwner(ctx, ownerID, projectID)
+func (s *ProjectService) Publish(ctx context.Context, projectID int64) (*domain.Project, error) {
+	project, err := s.projects.ByID(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	if project.Status == domain.ProjectStatusArchived {
+	switch project.Status {
+	case domain.ProjectStatusArchived:
 		return nil, ErrInvalidProjectTransition
-	}
 
-	if project.Status == domain.ProjectStatusPublished {
+	case domain.ProjectStatusPublished:
 		return project, nil
 	}
 
+	// PublishedAt records first time publication - not currently reset on unpublish/republish
 	project.Status = domain.ProjectStatusPublished
 
 	if project.PublishedAt == nil {
@@ -126,24 +119,21 @@ func (s *ProjectService) Publish(ctx context.Context, ownerID int64, projectID i
 	return project, nil
 }
 
-func (s *ProjectService) Unpublish(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
-	project, err := s.projectForOwner(
-		ctx,
-		ownerID,
-		projectID,
-	)
+func (s *ProjectService) Unpublish(ctx context.Context, projectID int64) (*domain.Project, error) {
+	project, err := s.projects.ByID(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	if project.Status == domain.ProjectStatusArchived {
+	switch project.Status {
+	case domain.ProjectStatusArchived:
 		return nil, ErrInvalidProjectTransition
-	}
 
-	if project.Status == domain.ProjectStatusDraft {
+	case domain.ProjectStatusDraft:
 		return project, nil
 	}
 
+	// Same here
 	project.Status = domain.ProjectStatusDraft
 
 	if err := s.projects.Update(ctx, project); err != nil {
@@ -153,40 +143,17 @@ func (s *ProjectService) Unpublish(ctx context.Context, ownerID int64, projectID
 	return project, nil
 }
 
-func (s *ProjectService) Archive(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
-	project, err := s.projectForOwner(
-		ctx,
-		ownerID,
-		projectID,
-	)
+func (s *ProjectService) Unlist(ctx context.Context, projectID int64) (*domain.Project, error) {
+	project, err := s.projects.ByID(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	if project.Status == domain.ProjectStatusArchived {
-		return project, nil
-	}
-
-	project.Status = domain.ProjectStatusArchived
-
-	if err := s.projects.Update(ctx, project); err != nil {
-		return nil, err
-	}
-
-	return project, nil
-}
-
-func (s *ProjectService) Unlist(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
-	project, err := s.projectForOwner(ctx, ownerID, projectID)
-	if err != nil {
-		return nil, err
-	}
-
-	if project.Status == domain.ProjectStatusArchived {
+	switch project.Status {
+	case domain.ProjectStatusArchived:
 		return nil, ErrInvalidProjectTransition
-	}
 
-	if project.Status == domain.ProjectStatusUnlisted {
+	case domain.ProjectStatusUnlisted:
 		return project, nil
 	}
 
@@ -204,12 +171,31 @@ func (s *ProjectService) Unlist(ctx context.Context, ownerID int64, projectID in
 	return project, nil
 }
 
-func (s *ProjectService) ByID(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
-	return s.projectForOwner(ctx, ownerID, projectID)
+func (s *ProjectService) Archive(ctx context.Context, projectID int64) (*domain.Project, error) {
+	project, err := s.projects.ByID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if project.Status == domain.ProjectStatusArchived {
+		return project, nil
+	}
+
+	project.Status = domain.ProjectStatusArchived
+
+	if err := s.projects.Update(ctx, project); err != nil {
+		return nil, err
+	}
+
+	return project, nil
 }
 
-func (s *ProjectService) ListByOwner(ctx context.Context, ownerID int64) ([]*domain.Project, error) {
-	return s.projects.ListByOwner(ctx, ownerID)
+func (s *ProjectService) ByID(ctx context.Context, projectID int64) (*domain.Project, error) {
+	return s.projects.ByID(ctx, projectID)
+}
+
+func (s *ProjectService) List(ctx context.Context) ([]*domain.Project, error) {
+	return s.projects.List(ctx)
 }
 
 func (s *ProjectService) ByPublicSlug(ctx context.Context, slug string) (*domain.Project, error) {
@@ -229,20 +215,6 @@ func (s *ProjectService) ByPublicSlug(ctx context.Context, slug string) (*domain
 
 func (s *ProjectService) ListPublic(ctx context.Context) ([]*domain.Project, error) {
 	return s.projects.ListPublished(ctx)
-}
-
-func (s *ProjectService) projectForOwner(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
-	project, err := s.projects.ByID(ctx, projectID)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if project.OwnerID != ownerID {
-		return nil, domain.ErrProjectNotFound
-	}
-
-	return project, nil
 }
 
 // Misc
@@ -269,5 +241,17 @@ func slugify(value string) string {
 	return strings.Trim(
 		builder.String(),
 		"-",
+	)
+}
+
+func sequencedSlug(base string, number int) string {
+	if number <= 1 {
+		return base
+	}
+
+	return fmt.Sprintf(
+		"%s-%d",
+		base,
+		number,
 	)
 }
