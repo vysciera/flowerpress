@@ -35,8 +35,8 @@ type MediaPlacement struct {
 	Role     MediaPlacementRole
 	Position int
 
-	Captioni string
-	AltText  string
+	Caption string
+	AltText string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
