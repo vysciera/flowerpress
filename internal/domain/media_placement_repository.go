@@ -12,6 +12,6 @@ type MediaPlacementRepository interface {
 	Update(ctx context.Context, placement *MediaPlacement) error
 	Delete(ctx context.Context, id int64) error
 
-	ById(ctx context.Context, id int64) (*MediaPlacement, error)
+	ByID(ctx context.Context, id int64) (*MediaPlacement, error)
 	ListByProject(ctx context.Context, projectID int64) ([]*MediaPlacement, error)
 }
