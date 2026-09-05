@@ -93,6 +93,90 @@ var migrations = []Migration{
 				ON projects(created_at);
 		`,
 	},
+	{
+		Version: 4,
+		Name:    "create media",
+		SQL: `
+		CREATE TABLE media_assets (
+			id INTEGER PRIMARY KEY,
+			owner_id INTEGER NOT NULL,
+
+			storage_key TEXT NOT NULL UNIQUE,
+			original_name TEXT NOT NULL,
+			mime_type TEXT NOT NULL,
+			size_bytes INTEGER NOT NULL,
+			sha256 TEXT NOT NULL,
+
+			width INTEGER,
+			height INTEGER,
+
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+			FOREIGN KEY (owner_id)
+				REFERENCES users(id)
+				ON DELETE CASCADE,
+
+			CHECK (size_bytes >= 0),
+			CHECK (width IS NULL OR width > 0),
+			CHECK (height IS NULL OR height > 0)
+		);
+
+		CREATE INDEX idx_media_assets_owner_id
+			ON media_assets(owner_id);
+
+		CREATE INDEX idx_media_assets_sha256
+			ON media_assets(sha256);
+
+
+		CREATE TABLE media_placements (
+			id INTEGER PRIMARY KEY,
+
+			asset_id INTEGER NOT NULL,
+			project_id INTEGER NOT NULL,
+
+			role TEXT NOT NULL,
+			position INTEGER NOT NULL DEFAULT 0,
+
+			caption TEXT NOT NULL DEFAULT '',
+			alt_text TEXT NOT NULL DEFAULT '',
+
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+			FOREIGN KEY (asset_id)
+				REFERENCES media_assets(id)
+				ON DELETE CASCADE,
+
+			FOREIGN KEY (project_id)
+				REFERENCES projects(id)
+				ON DELETE CASCADE,
+
+			CHECK (
+				role IN (
+					'thumbnail',
+					'content',
+					'attachment'
+				)
+			),
+
+			CHECK (position >= 0)
+		);
+
+		CREATE INDEX idx_media_placements_asset_id
+			ON media_placements(asset_id);
+
+		CREATE INDEX idx_media_placements_project_id
+			ON media_placements(project_id);
+
+		CREATE INDEX idx_media_placements_project_position
+			ON media_placements(project_id, position);
+
+		CREATE UNIQUE INDEX idx_media_placements_project_thumbnail
+			ON media_placements(project_id)
+			WHERE role = 'thumbnail';
+	`,
+	},
 }
 
 func Migrate(db *sql.DB) error {
