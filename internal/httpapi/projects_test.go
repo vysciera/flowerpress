@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"flowerpress/internal/domain"
 )
 
 func TestCreateProjectRequiresAuthentication(t *testing.T) {
@@ -65,6 +67,84 @@ func TestCreateProject(t *testing.T) {
 		`"status":"draft"`,
 	) {
 		t.Fatalf("expected draft status, got %s", response.Body.String())
+	}
+}
+
+func TestDeleteProject(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	request := httptest.NewRequest(
+		http.MethodDelete,
+		fmt.Sprintf(
+			"/api/projects/%d",
+			project.ID,
+		),
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusNoContent,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	get := httptest.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf(
+			"/api/projects/%d",
+			project.ID,
+		),
+		nil,
+	)
+
+	get.AddCookie(cookie)
+	getResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(getResponse, get)
+
+	if getResponse.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected deleted project to return %d, got %d",
+			http.StatusNotFound,
+			getResponse.Code,
+		)
+	}
+}
+
+func TestDeleteProjectNotFound(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	request := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/projects/999",
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNotFound,
+			response.Code,
+		)
 	}
 }
 
@@ -408,5 +488,290 @@ func TestUpdateProjectRequiresTitle(t *testing.T) {
 
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
+	}
+}
+
+// !!Project lifecycle handling
+func TestPublishProject(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/publish",
+			project.ID,
+		),
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var updated projectResponse
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&updated); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+
+	if updated.Status != domain.ProjectStatusPublished {
+		t.Fatalf(
+			"expected published status, got %q",
+			updated.Status,
+		)
+	}
+
+	if updated.PublishedAt == nil {
+		t.Fatal("expected PublishedAt")
+	}
+}
+
+func TestUnpublishProject(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	publish := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/publish",
+			project.ID,
+		),
+		nil,
+	)
+	publish.AddCookie(cookie)
+
+	publishResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		publishResponse,
+		publish,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/unpublish",
+			project.ID,
+		),
+		nil,
+	)
+	request.AddCookie(cookie)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var updated projectResponse
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&updated); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+
+	if updated.Status != domain.ProjectStatusDraft {
+		t.Fatalf(
+			"expected draft status, got %q",
+			updated.Status,
+		)
+	}
+}
+
+func TestUnlistProject(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/unlist",
+			project.ID,
+		),
+		nil,
+	)
+	request.AddCookie(cookie)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var updated projectResponse
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&updated); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+
+	if updated.Status != domain.ProjectStatusUnlisted {
+		t.Fatalf(
+			"expected unlisted status, got %q",
+			updated.Status,
+		)
+	}
+}
+
+func TestArchiveProject(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/archive",
+			project.ID,
+		),
+		nil,
+	)
+	request.AddCookie(cookie)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var updated projectResponse
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&updated); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+
+	if updated.Status != domain.ProjectStatusArchived {
+		t.Fatalf(
+			"expected archived status, got %q",
+			updated.Status,
+		)
+	}
+}
+
+func TestPublishArchivedProjectReturnsConflict(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	project := createProjectResponse(
+		t,
+		server,
+		cookie,
+		"Flowerpress",
+	)
+
+	archive := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/archive",
+			project.ID,
+		),
+		nil,
+	)
+	archive.AddCookie(cookie)
+
+	archiveResponse := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		archiveResponse,
+		archive,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/publish",
+			project.ID,
+		),
+		nil,
+	)
+	request.AddCookie(cookie)
+
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusConflict,
+			response.Code,
+			response.Body.String(),
+		)
 	}
 }

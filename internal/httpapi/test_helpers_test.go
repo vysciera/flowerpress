@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -110,21 +111,30 @@ func loginTestUser(t *testing.T, server *Server) *http.Cookie { // Refactor prop
 	return cookies[0]
 }
 
-func createTestProject(t *testing.T, server *Server, cookie *http.Cookie, title string) string {
+func createProjectResponse(
+	t *testing.T,
+	server *Server,
+	cookie *http.Cookie,
+	title string,
+) projectResponse {
 	t.Helper()
 
-	endpoint := "/api/projects"
 	request := httptest.NewRequest(
 		http.MethodPost,
-		endpoint,
+		"/api/projects",
 		strings.NewReader(
 			`{"title":"`+title+`"}`,
 		),
 	)
 
 	request.AddCookie(cookie)
+
 	response := httptest.NewRecorder()
-	server.Handler().ServeHTTP(response, request)
+
+	server.Handler().ServeHTTP(
+		response,
+		request,
+	)
 
 	if response.Code != http.StatusCreated {
 		t.Fatalf(
@@ -135,5 +145,16 @@ func createTestProject(t *testing.T, server *Server, cookie *http.Cookie, title 
 		)
 	}
 
-	return response.Body.String()
+	var project projectResponse
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&project); err != nil {
+		t.Fatalf(
+			"decode test project: %v",
+			err,
+		)
+	}
+
+	return project
 }

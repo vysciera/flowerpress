@@ -668,3 +668,92 @@ func TestProjectServiceByPublicSlugUnlisted(t *testing.T) {
 		t.Fatalf("expected project ID %d, got %d", project.ID, found.ID)
 	}
 }
+
+func TestProjectServiceDelete(t *testing.T) {
+	projects, user := testProjectService(t)
+	ctx := context.Background()
+
+	project, err := projects.Create(
+		ctx,
+		user.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	if err := projects.Delete(
+		ctx,
+		user.ID,
+		project.ID,
+	); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+
+	_, err = projects.ByID(
+		ctx,
+		user.ID,
+		project.ID,
+	)
+
+	if !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Fatalf(
+			"expected ErrProjectNotFound, got %v",
+			err,
+		)
+	}
+}
+
+func TestProjectServiceDeleteRejectsDifferentOwner(
+	t *testing.T,
+) {
+	db := testDatabase(t)
+
+	users := turso.NewUserRepository(db)
+	repo := turso.NewProjectRepository(db)
+	projects := NewProjectService(repo)
+
+	ctx := context.Background()
+
+	owner := &domain.User{
+		Username:     "flower",
+		PasswordHash: "flowerhash",
+	}
+
+	other := &domain.User{
+		Username:     "garden",
+		PasswordHash: "gardenhash",
+	}
+
+	if err := users.Create(ctx, owner); err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+
+	if err := users.Create(ctx, other); err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+
+	project, err := projects.Create(
+		ctx,
+		owner.ID,
+		"Flowerpress",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	err = projects.Delete(
+		ctx,
+		other.ID,
+		project.ID,
+	)
+
+	if !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Fatalf(
+			"expected ErrProjectNotFound, got %v",
+			err,
+		)
+	}
+}

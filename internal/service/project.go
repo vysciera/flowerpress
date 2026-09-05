@@ -89,6 +89,15 @@ func (s *ProjectService) Update(ctx context.Context, ownerID int64, projectID in
 	return project, nil
 }
 
+func (s *ProjectService) Delete(ctx context.Context, ownerID int64, projectID int64) error {
+	project, err := s.projectForOwner(ctx, ownerID, projectID)
+	if err != nil {
+		return err
+	}
+
+	return s.projects.Delete(ctx, project.ID)
+}
+
 func (s *ProjectService) Publish(ctx context.Context, ownerID int64, projectID int64) (*domain.Project, error) {
 	project, err := s.projectForOwner(ctx, ownerID, projectID)
 	if err != nil {
@@ -232,6 +241,7 @@ func (s *ProjectService) projectForOwner(ctx context.Context, ownerID int64, pro
 	return project, nil
 }
 
+// Misc
 func slugify(value string) string {
 	value = strings.ToLower(
 		strings.TrimSpace(value),
