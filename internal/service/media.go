@@ -2,7 +2,12 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 
 	"flowerpress/internal/domain"
@@ -20,17 +25,123 @@ var (
 	ErrInvalidMediaPosition      = errors.New("invalid media position")
 )
 
+type byteCounter struct {
+	n int64
+}
+
 type MediaService struct {
 	assets     domain.MediaAssetRepository
 	placements domain.MediaPlacementRepository
 	projects   domain.ProjectRepository
+	storage	   MediaStorage
 }
 
-func NewMediaService(assets domain.MediaAssetRepository, placements domain.MediaPlacementRepository, projects domain.ProjectRepository) *MediaService {
+func (c *byteCounter) Write(p []byte) (int, error) {
+	c.n += int64(len(p))
+	return len(p), nil
+}
+
+func newMediaStorageKey() (string, error) {
+	var random [16]byte
+
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", fmt.Errorf("generate media storage key: %w", err)
+	}
+
+	return "objects/" + hex.EncodeToString(random[:]), nil
+}
+
+func (s *MediaService) UploadAsset(ctx context.Context, originalName string, mimeType string, source io.Reader, width, height *int) (*domain.MediaAsset, error) {
+	originalName = strings.TrimSpace(originalName)
+	mimeType = strings.TrimSpace(mimeType)
+
+	switch {
+	case originalName == "":
+		return nil, ErrMediaOriginalNameRequired
+
+	case mimeType == "":
+		return nil, ErrMediaMIMETypeRequired
+
+	case source == nil:
+			return nil, errors.New("media source is required")
+
+	case width != nil && *width <= 0:
+			return nil, ErrInvalidMediaDimensions
+
+	case height != nil && *height <= 0:
+		return nil, ErrInvalidMediaDimensions
+	}
+
+	storageKey, err := newMediaStorageKey()
+	if err != nil {
+		return nil, err
+	}
+
+	hasher := sha256.New()
+	counter := &byteCounter{}
+
+	reader := io.TeeReader(source, io.MultiWriter(hasher, counter))
+	if err := s.storage.Put(ctx, storageKey, reader); err != nil {
+		return nil, fmt.Errorf("store uploaded media: %w", err)
+	}
+
+	hash := hex.EncodeToString(hasher.Sum(nil))
+	existing, err := s.assets.BySHA256(ctx, hash)
+
+	switch {
+	case err == nil:
+		if err := s.storage.Delete(ctx, storageKey); err != nil { // Review later
+			return nil, fmt.Errorf("remove duplicate media object: %w", err)
+		}
+
+		return existing, nil
+
+	case !errors.Is(err, domain.ErrMediaAssetNotFound):
+		_ = s.storage.Delete(ctx, storageKey)
+
+		return nil, err
+	}
+
+	asset := &domain.MediaAsset{
+		StorageKey:		storageKey,
+		OriginalName:	originalName,
+		MIMEType:		mimeType,
+		SizeBytes:		counter.n,
+		SHA256:			hash,
+		Width:			width,
+		Height:			height,
+	}
+
+	if err := s.assets.Create(ctx, asset); err != nil {
+		existing, findErr := s.assets.BySHA256(ctx, hash)
+
+		if findErr == nil {
+			if deleteErr := s.storage.Delete(ctx, storageKey); deleteErr != nil {
+				return nil, fmt.Errorf("remove concurrent duplicate: %w", deleteErr)
+			}
+
+			return existing, nil
+		}
+
+		_ = s.storage.Delete(ctx, storageKey)
+
+		return nil, err
+	}
+
+	return asset, nil
+}
+
+func NewMediaService(
+	assets domain.MediaAssetRepository,
+	placements domain.MediaPlacementRepository, 
+	projects domain.ProjectRepository,
+	storage MediaStorage,
+) *MediaService {
 	return &MediaService{
 		assets:     assets,
 		placements: placements,
 		projects:   projects,
+		storage: storage,
 	}
 }
 

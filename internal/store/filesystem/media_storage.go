@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"flowerpress/internal/service"
 )
 
 type MediaStorage struct {
@@ -21,8 +19,6 @@ func NewMediaStorage(root string) *MediaStorage {
 		root: root,
 	}
 }
-
-var _ service.MediaStorage = (*MediaStorage)(nil)
 
 func (s *MediaStorage) Put(ctx context.Context, key string, source io.Reader) error {
 	path, err := s.pathForKey(key)

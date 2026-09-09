@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"flowerpress/internal/domain"
+	"flowerpress/internal/store/filesystem"
 	"flowerpress/internal/store/turso"
 )
 
@@ -18,6 +19,7 @@ func testMediaService(t *testing.T) *MediaService {
 		turso.NewMediaAssetRepository(db),
 		turso.NewMediaPlacementRepository(db),
 		turso.NewProjectRepository(db),
+		filesystem.NewMediaStorage(t.TempDir()),
 	)
 }
 
@@ -134,6 +136,7 @@ func TestMediaServicePlaceAsset(t *testing.T) {
 		assetRepo,
 		placementRepo,
 		projectRepo,
+		filesystem.NewMediaStorage(t.TempDir()),
 	)
 
 	ctx := context.Background()
@@ -234,6 +237,7 @@ func TestMediaServicePlaceAssetRequiresAsset(t *testing.T) {
 		turso.NewMediaAssetRepository(db),
 		turso.NewMediaPlacementRepository(db),
 		projectRepo,
+		filesystem.NewMediaStorage(t.TempDir()),
 	)
 
 	ctx := context.Background()
