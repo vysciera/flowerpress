@@ -96,6 +96,60 @@ func (s *Server) handleListMedia(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
+func (s *Server) handleMediaContent(w http.ResponseWriter, r *http.Request) {
+	mediaID, err := mediaIDFromRequest(r)
+	if err != nil || mediaID <= 0 {
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid media id",
+			},
+		)
+		return
+	}
+
+	asset, content, err := s.media.OpenAssetContent(r.Context(), mediaID)
+	switch {
+	case errors.Is(err, domain.ErrMediaAssetNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "media asset not found",
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	defer content.Close()
+
+	w.Header().Set("Content-Type", asset.MIMEType)
+
+	// Incoming number of bytes
+	w.Header().Set("Content-Length", strconv.FormatInt(
+		asset.SizeBytes,
+		10,
+	))
+
+	// Don't MIMESniff me
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+
+	// Headers may have already been sent
+	// No real useful JSON error response to write (atm)
+	if _, err := io.Copy(w, content); err != nil {
+		return
+	}
+}
+
 func mediaAssetToResponse(asset *domain.MediaAsset) mediaAssetResponse {
 	return mediaAssetResponse{
 		ID:           asset.ID,
