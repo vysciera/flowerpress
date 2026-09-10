@@ -3,22 +3,35 @@ package httpapi
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"flowerpress/internal/service"
 )
 
 type Server struct {
 	users         *service.UserService
 	sessions      *service.SessionService
+	projects      *service.ProjectService
+	media         *service.MediaService
 	secureCookies bool
-	mux           *http.ServeMux
+
+	router chi.Router
 }
 
-func NewServer(users *service.UserService, sessions *service.SessionService, secureCookies bool) *Server {
+func NewServer(
+	users *service.UserService,
+	sessions *service.SessionService,
+	projects *service.ProjectService,
+	media *service.MediaService,
+	secureCookies bool,
+) *Server {
 	s := &Server{
 		users:         users,
 		sessions:      sessions,
+		projects:      projects,
+		media:         media,
 		secureCookies: secureCookies,
-		mux:           http.NewServeMux(),
+		router:        chi.NewRouter(),
 	}
 
 	s.routes()
@@ -27,23 +40,61 @@ func NewServer(users *service.UserService, sessions *service.SessionService, sec
 }
 
 func (s *Server) Handler() http.Handler {
-	return s.mux
+	return s.router
 }
 
 func (s *Server) routes() {
-	s.mux.HandleFunc("GET /health", s.handleHealth)
+	r := s.router
 
-	s.mux.Handle("GET /api/auth/me", // wuh
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleMe,
-			),
-		),
-	)
+	r.Get("/health", s.handleHealth)
 
-	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
-	s.mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
-	s.mux.HandleFunc("POST /api/auth/register", s.handleRegister)
+	r.Route("/api", func(r chi.Router) {
+		r.Post("/auth/register", s.handleRegister)
+		r.Post("/auth/login", s.handleLogin)
+		r.Post("/auth/logout", s.handleLogout)
+
+		r.Get("/public/projects", s.handlePublicProjects)
+		r.Get("/public/projects/{slug}", s.handlePublicProject)
+
+		r.Get("/public/projects/{slug}/media", s.handlePublicProjectMedia)
+		r.Get("/public/projects/{slug}/media/{assetID}/content", s.handlePublicMediaContent)
+
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireAuth)
+
+			r.Get("/auth/me", s.handleMe)
+
+			// Media
+			r.Get("/media", s.handleListMedia)
+			r.Post("/media", s.handleUploadMedia)
+
+			r.Get("/media/{id}", s.handleGetMedia)
+			r.Get("/media/{id}/content", s.handleMediaContent)
+
+			// Placements
+			r.Put("/media/placements/{id}", s.handleUpdateMediaPlacement)
+			r.Delete("/media/placements/{id}", s.handleDeleteMediaPlacement)
+
+			r.Put("/projects/{id}/media/order", s.handleReorderProjectMedia)
+
+			// Projects
+			r.Post("/projects/{id}/media", s.handlePlaceMedia)
+
+			r.Get("/projects", s.handleListProjects)
+			r.Post("/projects", s.handleCreateProject)
+
+			r.Get("/projects/{id}", s.handleGetProject)
+			r.Put("/projects/{id}", s.handleUpdateProject)
+			r.Delete("/projects/{id}", s.handleDeleteProject)
+
+			r.Post("/projects/{id}/publish", s.handlePublishProject)
+			r.Post("/projects/{id}/unpublish", s.handleUnpublishProject)
+			r.Post("/projects/{id}/unlist", s.handleUnlistProject)
+			r.Post("/projects/{id}/archive", s.handleArchiveProject)
+
+			r.Get("/projects/{id}/media", s.handleListProjectMedia)
+		})
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

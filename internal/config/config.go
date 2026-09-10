@@ -5,6 +5,7 @@ import "os"
 type Config struct {
 	Address       string
 	DatabasePath  string
+	MediaPath     string
 	Environment   string
 	SecureCookies bool
 }
@@ -13,6 +14,7 @@ func Load() Config {
 	return Config{
 		Address:       getEnv("FLOWERPRESS_ADDRESS", ":8080"),
 		DatabasePath:  getEnv("FLOWERPRESS_DATABASE", "data/flowerpress.db"),
+		MediaPath:     getEnv("FLOWERPRESS_MEDIA", "data/media"),
 		Environment:   getEnv("FLOWERPRESS_ENV", "development"),
 		SecureCookies: getEnv("FLOWERPRESS_SECURE_COOKIES", "") == "true",
 	}

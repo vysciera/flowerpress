@@ -97,6 +97,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 
+	case errors.Is(err, service.ErrOwnerAlreadyRegistered):
+		writeJSON(
+			w, http.StatusConflict,
+			map[string]string{
+				"error": "flowerpress owner is already registered",
+			},
+		)
+		return
+
 	case err != nil:
 		writeJSON(
 			w,
@@ -175,6 +184,15 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 			http.StatusConflict,
 			map[string]string{
 				"error": "username already taken",
+			},
+		)
+		return
+
+	case errors.Is(err, service.ErrOwnerAlreadyRegistered):
+		writeJSON(
+			w, http.StatusConflict,
+			map[string]string{
+				"error": "flowerpress owner is already registered",
 			},
 		)
 		return

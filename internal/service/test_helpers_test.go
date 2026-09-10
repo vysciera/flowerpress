@@ -18,15 +18,17 @@ func testDatabase(t *testing.T) *sql.DB {
 
 	db, err := database.Open(path)
 	if err != nil {
-		t.Fatalf("open database: %v", err)
-
-		t.Cleanup(func() {
-			db.Close()
-		})
+		t.Fatalf("open test database: %v", err)
 	}
 
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close test database: %v", err)
+		}
+	})
+
 	if err := database.Migrate(db); err != nil {
-		t.Fatalf("migrate database: %v", err)
+		t.Fatalf("migrate test database: %v", err)
 	}
 
 	return db

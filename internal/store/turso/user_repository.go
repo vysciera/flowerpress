@@ -191,6 +191,27 @@ func (r *UserRepository) ByID(ctx context.Context, id int64) (*domain.User, erro
 	return user, nil
 }
 
+func (r *UserRepository) HasAny(ctx context.Context) (bool, error) {
+	var exists int
+	
+	err := r.db.QueryRowContext(
+		ctx,
+		`
+			SELECT EXISTS (
+				SELECT 1
+				FROM users
+				LIMIT 1
+			)
+		`,
+	).Scan(&exists)
+
+	if err != nil {
+		return false, fmt.Errorf("check for existing user: %w", err)
+	}
+
+	return exists == 1, nil
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }

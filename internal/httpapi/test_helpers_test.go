@@ -1,15 +1,18 @@
 package httpapi
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"flowerpress/internal/database"
 	"flowerpress/internal/service"
+	"flowerpress/internal/store/filesystem"
 	"flowerpress/internal/store/turso"
 )
 
@@ -23,43 +26,71 @@ func testServer(t *testing.T) *Server {
 
 	db, err := database.Open(path)
 	if err != nil {
-		t.Fatalf("open databse: %v", err)
+		t.Fatalf("open test database: %v", err)
 	}
 
 	t.Cleanup(func() {
-		db.Close()
+		if err := db.Close(); err != nil {
+			t.Errorf("close test database: %v", err)
+		}
 	})
 
 	if err := database.Migrate(db); err != nil {
-		t.Fatalf("migrate database: %v", err)
+		t.Fatalf("migrate test database: %v", err)
 	}
 
-	users := turso.NewUserRepository(db)
-	sessions := turso.NewSessionRepository(db)
+	userRepository := turso.NewUserRepository(db)
+	sessionRepository := turso.NewSessionRepository(db)
+	projectRepository := turso.NewProjectRepository(db)
+	mediaAssetRepository := turso.NewMediaAssetRepository(db)
+	mediaPlacementRepository := turso.NewMediaPlacementRepository(db)
 
-	return NewServer(
-		service.NewUserService(users),
-		service.NewSessionService(sessions, users, 24*time.Hour),
-		false, // SecureCookie?
+	users := service.NewUserService(userRepository)
+	sessions := service.NewSessionService(
+		sessionRepository,
+		userRepository,
+		24*time.Hour,
 	)
+
+	projects := service.NewProjectService(projectRepository)
+	media := service.NewMediaService(
+		mediaAssetRepository,
+		mediaPlacementRepository,
+		projectRepository,
+		filesystem.NewMediaStorage(t.TempDir()),
+	)
+
+	return NewServer(users, sessions, projects, media, false)
 }
 
-func loginTestUser(t *testing.T, server *Server) *http.Cookie { // Refactor properly into tests later
+func jsonBody(t *testing.T, value any) io.Reader {
 	t.Helper()
 
-	registerBody := `{"username":"flower","password":"newgarden"}`
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal JSON body: %v", err)
+	}
+
+	return bytes.NewReader(data)
+}
+
+func loginTestUser(t *testing.T, server *Server) *http.Cookie {
+	t.Helper()
+
 	registerRequest := httptest.NewRequest(
 		http.MethodPost,
 		"/api/auth/register",
-		strings.NewReader(registerBody),
+		jsonBody(
+			t,
+			map[string]string{
+				"username": "flower",
+				"password": "newgarden",
+			},
+		),
 	)
 
 	registerResponse := httptest.NewRecorder()
-
-	server.Handler().ServeHTTP(
-		registerResponse,
-		registerRequest,
-	)
+	server.Handler().ServeHTTP(registerResponse, registerRequest)
 
 	if registerResponse.Code != http.StatusCreated {
 		t.Fatalf(
@@ -70,19 +101,20 @@ func loginTestUser(t *testing.T, server *Server) *http.Cookie { // Refactor prop
 		)
 	}
 
-	loginBody := `{"username":"flower","password":"newgarden"}`
 	loginRequest := httptest.NewRequest(
 		http.MethodPost,
 		"/api/auth/login",
-		strings.NewReader(loginBody),
+		jsonBody(
+			t,
+			map[string]string{
+				"username": "flower",
+				"password": "newgarden",
+			},
+		),
 	)
 
 	loginResponse := httptest.NewRecorder()
-
-	server.Handler().ServeHTTP(
-		loginResponse,
-		loginRequest,
-	)
+	server.Handler().ServeHTTP(loginResponse, loginRequest)
 
 	if loginResponse.Code != http.StatusOK {
 		t.Fatalf(
@@ -93,17 +125,49 @@ func loginTestUser(t *testing.T, server *Server) *http.Cookie { // Refactor prop
 		)
 	}
 
-	result := loginResponse.Result()
-	defer result.Body.Close()
+	for _, cookie := range loginResponse.Result().Cookies() {
+		if cookie.Name == sessionCookieName {
+			return cookie
+		}
+	}
 
-	cookies := result.Cookies() // Cut this out later, otherwise rename loginTestUserCookie
+	t.Fatal("login response did not contain session cookie")
 
-	if len(cookies) != 1 {
+	return nil
+}
+
+func createProjectResponse(t *testing.T, server *Server, cookie *http.Cookie, title string) projectResponse {
+	t.Helper()
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/projects",
+		jsonBody(
+			t,
+			createProjectRequest{
+				Title: title,
+			},
+		),
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
 		t.Fatalf(
-			"expected 1 session cookie, got %d",
-			len(cookies),
+			"create test project: expected %d, got %d: %s",
+			http.StatusCreated,
+			response.Code,
+			response.Body.String(),
 		)
 	}
 
-	return cookies[0]
+	var project projectResponse
+
+	if err := json.NewDecoder(response.Body).Decode(&project); err != nil {
+		t.Fatalf("decode created project: %v", err)
+	}
+
+	return project
 }
