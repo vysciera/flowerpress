@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"bytes"
 	"encoding/json"
 	"mime/multipart"
@@ -392,5 +393,167 @@ func TestListMedia(t *testing.T) {
 
 	if !ids[second.ID] {
 		t.Fatalf("expected media asset ID %d", second.ID)
+	}
+}
+
+func TestGetMediaRequiresAuthentication(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/media/1",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			response.Code,
+		)
+	}
+}
+
+func TestGetMedia(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	content := []byte(
+		"flowerpress media",
+	)
+
+	body, contentType := multipartUpload(
+		t,
+		"flower.txt",
+		"text/plain",
+		content,
+	)
+
+	uploadRequest := httptest.NewRequest(
+		http.MethodPost,
+		"/api/media",
+		body,
+	)
+
+	uploadRequest.Header.Set("Content-Type", contentType)
+
+	uploadRequest.AddCookie(cookie)
+	uploadResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(uploadResponse, uploadRequest)
+
+	if uploadResponse.Code != http.StatusCreated {
+		t.Fatalf(
+			"upload media: expected %d, got %d: %s",
+			http.StatusCreated,
+			uploadResponse.Code,
+			uploadResponse.Body.String(),
+		)
+	}
+
+	var uploaded mediaAssetResponse
+
+	if err := json.NewDecoder(uploadResponse.Body).Decode(&uploaded); err != nil {
+		t.Fatalf("decode uploaded media: %v", err)
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf(
+			"/api/media/%d",
+			uploaded.ID,
+		),
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var found mediaAssetResponse
+
+	if err := json.NewDecoder(response.Body).Decode(&found); err != nil {
+		t.Fatalf("decode media asset: %v", err)
+	}
+
+	if found.ID != uploaded.ID {
+		t.Fatalf(
+			"expected media ID %d, got %d",
+			uploaded.ID,
+			found.ID,
+		)
+	}
+
+	if found.OriginalName != "flower.txt" {
+		t.Fatalf(
+			"expected original name %q, got %q",
+			"flower.txt",
+			found.OriginalName,
+		)
+	}
+}
+
+func TestGetMediaNotFound(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/media/999",
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusNotFound,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+}
+
+func TestGetMediaRejectsInvalidID(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	for _, path := range []string{
+		"/api/media/nope",
+		"/api/media/0",
+		"/api/media/-1",
+	} {
+		request := httptest.NewRequest(
+			http.MethodGet,
+			path,
+			nil,
+		)
+
+		request.AddCookie(cookie)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf(
+				"%s: expected status %d, got %d",
+				path,
+				http.StatusBadRequest,
+				response.Code,
+			)
+		}
 	}
 }
