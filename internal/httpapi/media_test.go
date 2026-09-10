@@ -557,3 +557,137 @@ func TestGetMediaRejectsInvalidID(t *testing.T) {
 		}
 	}
 }
+
+func TestMediaContent(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	expected := []byte(
+		"flowerpress stored media",
+	)
+
+	body, contentType := multipartUpload(
+		t,
+		"flower.txt",
+		"text/plain",
+		expected,
+	)
+
+	uploadRequest := httptest.NewRequest(
+		http.MethodPost,
+		"/api/media",
+		body,
+	)
+
+	uploadRequest.Header.Set("Content-Type", contentType)
+
+	uploadRequest.AddCookie(cookie)
+	uploadResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(uploadResponse, uploadRequest)
+
+	if uploadResponse.Code != http.StatusCreated {
+		t.Fatalf(
+			"upload media: expected %d, got %d: %s",
+			http.StatusCreated,
+			uploadResponse.Code,
+			uploadResponse.Body.String(),
+		)
+	}
+
+	var asset mediaAssetResponse
+
+	if err := json.NewDecoder(
+		uploadResponse.Body,
+	).Decode(&asset); err != nil {
+		t.Fatalf(
+			"decode uploaded media: %v",
+			err,
+		)
+	}
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf(
+			"/api/media/%d/content",
+			asset.ID,
+		),
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	if !bytes.Equal(response.Body.Bytes(), expected) {
+		t.Fatalf(
+			"expected content %q, got %q",
+			expected,
+			response.Body.Bytes(),
+		)
+	}
+
+	if response.Header().Get("Content-Type") != "text/plain; charset=utf-8" {
+		t.Fatalf(
+			"unexpected Content-Type %q",
+			response.Header().Get("Content-Type"),
+		)
+	}
+
+	if response.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("expected X-Content-Type-Options nosniff")
+	}
+}
+
+func TestMediaContentRequiresAuthentication(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/media/1/content",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			response.Code,
+		)
+	}
+}
+
+func TestMediaContentNotFound(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/media/999/content",
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusNotFound,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+}
