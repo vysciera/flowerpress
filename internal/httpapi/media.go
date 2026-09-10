@@ -123,6 +123,42 @@ func (s *Server) handleUpdateMediaPlacement(w http.ResponseWriter, r *http.Reque
 	)
 }
 
+func (s *Server) handleDeleteMediaPlacement(w http.ResponseWriter, r *http.Request) {
+	placementID, err := mediaPlacementIDFromRequest(r)
+	if err != nil || placementID <= 0 {
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid media placement id",
+			},
+		)
+		return
+	}
+
+	err = s.media.RemovePlacement(r.Context(), placementID)
+	switch {
+	case errors.Is(err, domain.ErrMediaPlacementNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "media placement not found",
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handlePlaceMedia(w http.ResponseWriter, r *http.Request) {
 	projectID, err := projectIDFromRequest(r)
 	if err != nil || projectID <= 0 {

@@ -70,6 +70,7 @@ func (s *Server) routes() {
 
 			// Placements
 			r.Put("/media/placements/{id}", s.handleUpdateMediaPlacement)
+			r.Delete("/media/placements/{id}", s.handleDeleteMediaPlacement)
 
 			// Projects
 			r.Post("/projects/{id}/media", s.handlePlaceMedia)
