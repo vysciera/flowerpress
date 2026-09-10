@@ -157,6 +157,20 @@ var migrations = []Migration{
 			WHERE role = 'thumbnail';
 	`,
 	},
+	{
+		Version:	5,
+		Name:	"enforce single owner",
+		SQL: `
+			ALTER TABLE users
+			ADD COLUMN owner_slot INTEGER
+				NOT NULL
+				DEFAULT 1
+				CHECK (owner_slot = 1);
+
+			CREATE UNIQUE INDEX idx_users_single_owner
+				ON users(owner_slot);
+		`,
+	},
 }
 
 func Migrate(db *sql.DB) error {
