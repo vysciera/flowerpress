@@ -1,14 +1,16 @@
 package httpapi
 
 import (
-	"fmt"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
 	"testing"
+
+	"flowerpress/internal/domain"
 )
 
 func multipartUpload(t *testing.T, filename, contentType string, content []byte) (*bytes.Buffer, string) {
@@ -689,5 +691,130 @@ func TestMediaContentNotFound(t *testing.T) {
 			response.Code,
 			response.Body.String(),
 		)
+	}
+}
+
+func TestPlaceMedia(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	// Create project.
+	projectRequest := httptest.NewRequest(
+		http.MethodPost,
+		"/api/projects",
+		jsonBody(t, map[string]string{
+			"title": "Test Project",
+		}),
+	)
+
+	projectRequest.Header.Set("Content-Type", "application/json")
+	projectRequest.AddCookie(cookie)
+	projectResponseRecorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(projectResponseRecorder, projectRequest)
+
+	if projectResponseRecorder.Code != http.StatusCreated {
+		t.Fatalf(
+			"create project: expected %d, got %d: %s",
+			http.StatusCreated,
+			projectResponseRecorder.Code,
+			projectResponseRecorder.Body.String(),
+		)
+	}
+
+	var project projectResponse
+
+	if err := json.NewDecoder(projectResponseRecorder.Body).Decode(&project); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+
+	// Upload asset.
+	body, contentType := multipartUpload(
+		t,
+		"flower.txt",
+		"text/plain",
+		[]byte("flowerpress"),
+	)
+
+	uploadRequest := httptest.NewRequest(
+		http.MethodPost,
+		"/api/media",
+		body,
+	)
+
+	uploadRequest.Header.Set("Content-Type", contentType)
+	uploadRequest.AddCookie(cookie)
+	uploadResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(uploadResponse, uploadRequest)
+
+	if uploadResponse.Code != http.StatusCreated {
+		t.Fatalf(
+			"upload media: expected %d, got %d: %s",
+			http.StatusCreated,
+			uploadResponse.Code,
+			uploadResponse.Body.String(),
+		)
+	}
+
+	var asset mediaAssetResponse
+
+	if err := json.NewDecoder(uploadResponse.Body).Decode(&asset); err != nil {
+		t.Fatalf("decode asset: %v", err)
+	}
+
+	// Place asset in project.
+	request := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/projects/%d/media",
+			project.ID,
+		),
+		jsonBody(t, placeMediaRequest{
+			AssetID:  asset.ID,
+			Role:     domain.MediaPlacementContent,
+			Position: 0,
+			Caption:  "A flower",
+			AltText:  "Flower",
+		}),
+	)
+
+	request.Header.Set("Content-Type", "application/json")
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusCreated,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var placement mediaPlacementResponse
+
+	if err := json.NewDecoder(response.Body).Decode(&placement); err != nil {
+		t.Fatalf("decode placement: %v", err)
+	}
+
+	if placement.AssetID != asset.ID {
+		t.Fatalf(
+			"expected asset ID %d, got %d",
+			asset.ID,
+			placement.AssetID,
+		)
+	}
+
+	if placement.ProjectID != project.ID {
+		t.Fatalf(
+			"expected project ID %d, got %d",
+			project.ID,
+			placement.ProjectID,
+		)
+	}
+
+	if placement.Role != domain.MediaPlacementContent {
+		t.Fatalf("expected content role, got %q", placement.Role)
 	}
 }
