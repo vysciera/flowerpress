@@ -5,8 +5,8 @@ import (
 	"flowerpress/internal/database"
 	"flowerpress/internal/httpapi"
 	"flowerpress/internal/service"
-	"flowerpress/internal/store/turso"
 	"flowerpress/internal/store/filesystem"
+	"flowerpress/internal/store/turso"
 
 	"context"
 	"errors"
@@ -39,7 +39,7 @@ func main() {
 
 	mediaAssetRepository := turso.NewMediaAssetRepository(db)
 	mediaPlacementRepository := turso.NewMediaPlacementRepository(db)
-	
+
 	// Storage implementation
 	mediaStorage := filesystem.NewMediaStorage(cfg.MediaPath)
 
@@ -60,7 +60,6 @@ func main() {
 		projectRepository,
 		mediaStorage,
 	)
-
 
 	// Servers
 	apiServer := httpapi.NewServer(

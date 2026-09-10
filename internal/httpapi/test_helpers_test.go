@@ -12,6 +12,7 @@ import (
 
 	"flowerpress/internal/database"
 	"flowerpress/internal/service"
+	"flowerpress/internal/store/filesystem"
 	"flowerpress/internal/store/turso"
 )
 
@@ -41,8 +42,10 @@ func testServer(t *testing.T) *Server {
 	userRepository := turso.NewUserRepository(db)
 	sessionRepository := turso.NewSessionRepository(db)
 	projectRepository := turso.NewProjectRepository(db)
-	users := service.NewUserService(userRepository)
+	mediaAssetRepository := turso.NewMediaAssetRepository(db)
+	mediaPlacementRepository := turso.NewMediaPlacementRepository(db)
 
+	users := service.NewUserService(userRepository)
 	sessions := service.NewSessionService(
 		sessionRepository,
 		userRepository,
@@ -50,8 +53,14 @@ func testServer(t *testing.T) *Server {
 	)
 
 	projects := service.NewProjectService(projectRepository)
+	media := service.NewMediaService(
+		mediaAssetRepository,
+		mediaPlacementRepository,
+		projectRepository,
+		filesystem.NewMediaStorage(t.TempDir()),
+	)
 
-	return NewServer(users, sessions, projects, false)
+	return NewServer(users, sessions, projects, media, false)
 }
 
 func jsonBody(t *testing.T, value any) io.Reader {
