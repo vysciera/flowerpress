@@ -41,6 +41,13 @@ type placeMediaRequest struct {
 	AltText  string                    `json:"alt_text"`
 }
 
+type updateMediaPlacementRequest struct {
+	Role		domain.MediaPlacementRole	`json:"role"`
+	Position	int							`json:"position"`
+	Caption		string						`json:"caption"`
+	AltText		string						`json:"alt_text"`
+}
+
 type mediaPlacementResponse struct {
 	ID        int64                     `json:"id"`
 	AssetID   int64                     `json:"asset_id"`
@@ -51,6 +58,69 @@ type mediaPlacementResponse struct {
 	AltText   string                    `json:"alt_text"`
 	CreatedAt time.Time                 `json:"created_at"`
 	UpdatedAt time.Time                 `json:"updated_at"`
+}
+
+func (s *Server) handleUpdateMediaPlacement(w http.ResponseWriter, r *http.Request) {
+	placementID, err := mediaPlacementIDFromRequest(r)
+	if err != nil || placementID <= 0 {
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid media placement id",
+			},
+		)
+		return
+	}
+
+	var request updateMediaPlacementRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+
+	placement, err := s.media.UpdatePlacement(
+		r.Context(),
+		placementID,
+		request.Role,
+		request.Position,
+		request.Caption,
+		request.AltText,
+	)
+
+	switch {
+	case errors.Is(err, domain.ErrMediaPlacementNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "media placement not found",
+			},
+		)
+		return
+
+	case errors.Is(err, service.ErrInvalidMediaPlacementRole),
+		 errors.Is(err, service.ErrInvalidMediaPosition):
+
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": err.Error(),
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	writeJSON(
+		w, http.StatusOK,
+		mediaPlacementToResponse(placement),
+	)
 }
 
 func (s *Server) handlePlaceMedia(w http.ResponseWriter, r *http.Request) {
@@ -450,5 +520,12 @@ func mediaIDFromRequest(r *http.Request) (int64, error) {
 		chi.URLParam(r, "id"),
 		10,
 		64,
+	)
+}
+
+func mediaPlacementIDFromRequest(r *http.Request) (int64, error) {
+	return strconv.ParseInt(
+		chi.URLParam(r, "id"),
+		10, 64,
 	)
 }

@@ -61,12 +61,17 @@ func (s *Server) routes() {
 
 			r.Get("/auth/me", s.handleMe)
 
+			// Media
 			r.Get("/media", s.handleListMedia)
 			r.Post("/media", s.handleUploadMedia)
 
 			r.Get("/media/{id}", s.handleGetMedia)
 			r.Get("/media/{id}/content", s.handleMediaContent)
 
+			// Placements
+			r.Put("/media/placements/{id}", s.handleUpdateMediaPlacement)
+
+			// Projects
 			r.Post("/projects/{id}/media", s.handlePlaceMedia)
 
 			r.Get("/projects", s.handleListProjects)

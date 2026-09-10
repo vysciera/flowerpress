@@ -501,3 +501,103 @@ func TestMediaServiceOpenAssetContentNotFound(t *testing.T) {
 		t.Fatalf("expected ErrMediaAssetNotFound, got %v", err)
 	}
 }
+
+func TestMediaServiceUpdatePlacement(t *testing.T) {
+	ctx := context.Background()
+	media := testMediaService(t)
+
+	project := &domain.Project{
+		Title:       "Test Project",
+		Slug:        "test-project",
+		Description: "",
+		Status:      domain.ProjectStatusDraft,
+	}
+
+	if err := media.projects.Create(ctx, project); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	asset, err := media.UploadAsset(
+		ctx,
+		"flower.txt",
+		"text/plain",
+		bytes.NewReader([]byte("flower")),
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("upload asset: %v", err)
+	}
+
+	placement, err := media.PlaceAsset(
+		ctx,
+		project.ID,
+		asset.ID,
+		domain.MediaPlacementContent,
+		0,
+		"",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("place asset: %v", err)
+	}
+
+	updated, err := media.UpdatePlacement(
+		ctx,
+		placement.ID,
+		domain.MediaPlacementAttachment,
+		3,
+		"Updated caption",
+		"Updated alt text",
+	)
+	if err != nil {
+		t.Fatalf("update placement: %v", err)
+	}
+
+	if updated.Role != domain.MediaPlacementAttachment {
+		t.Fatalf(
+			"expected attachment role, got %q",
+			updated.Role,
+		)
+	}
+
+	if updated.Position != 3 {
+		t.Fatalf(
+			"expected position 3, got %d",
+			updated.Position,
+		)
+	}
+
+	if updated.AssetID != asset.ID {
+		t.Fatalf(
+			"asset changed from %d to %d",
+			asset.ID,
+			updated.AssetID,
+		)
+	}
+
+	if updated.ProjectID != project.ID {
+		t.Fatalf(
+			"project changed from %d to %d",
+			project.ID,
+			updated.ProjectID,
+		)
+	}
+}
+
+func TestMediaServiceUpdatePlacementRejectsInvalidRole(t *testing.T) {
+	media := testMediaService(t)
+
+	_, err := media.UpdatePlacement(
+		context.Background(),
+		1,
+		domain.MediaPlacementRole("nope"),
+		0,
+		"",
+		"",
+	)
+
+	if !errors.Is(err, ErrInvalidMediaPlacementRole) {
+		t.Fatalf("expected ErrInvalidMediaPlacementRole, got %v", err)
+	}
+}

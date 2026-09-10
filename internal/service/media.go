@@ -249,6 +249,41 @@ func validPlacementRole(role domain.MediaPlacementRole) bool {
 	}
 }
 
+// Please for the love of god reorganize all your file structures soon
+
+func (s *MediaService) UpdatePlacement(
+	ctx context.Context,
+	placementID int64,
+	role domain.MediaPlacementRole,
+	position int,
+	caption string,
+	altText string,
+) (*domain.MediaPlacement, error) {
+	if !validPlacementRole(role) {
+		return nil, ErrInvalidMediaPlacementRole
+	}
+
+	if position < 0 {
+		return nil, ErrInvalidMediaPosition
+	}
+
+	placement, err := s.placements.ByID(ctx, placementID)
+	if err != nil {
+		return nil, err
+	}
+
+	placement.Role = role
+	placement.Position = position
+	placement.Caption = caption
+	placement.AltText = altText
+
+	if err := s.placements.Update(ctx, placement); err != nil {
+		return nil, err
+	}
+
+	return placement, nil
+}
+
 func (s *MediaService) PlaceAsset(
 	ctx context.Context,
 	projectID int64,
