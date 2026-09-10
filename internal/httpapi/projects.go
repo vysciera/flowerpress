@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"flowerpress/internal/domain"
 	"flowerpress/internal/service"
 )
@@ -47,7 +49,9 @@ func projectToResponse(project *domain.Project) projectResponse {
 }
 
 func projectIDFromRequest(r *http.Request) (int64, error) {
-	return strconv.ParseInt(r.PathValue("id"), 10, 64)
+	return strconv.ParseInt(chi.URLParam(r, "id"),
+	10,
+	64)
 }
 
 // !!Server methods
@@ -276,7 +280,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePublicProject(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
+	slug := chi.URLParam(r, "slug")
 
 	if slug == "" {
 		writeJSON(
