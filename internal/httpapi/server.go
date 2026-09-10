@@ -3,6 +3,8 @@ package httpapi
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"flowerpress/internal/service"
 )
 
@@ -11,7 +13,8 @@ type Server struct {
 	sessions      *service.SessionService
 	projects      *service.ProjectService
 	secureCookies bool
-	mux           *http.ServeMux
+	
+	router chi.Router
 }
 
 func NewServer(
@@ -25,7 +28,7 @@ func NewServer(
 		sessions:      sessions,
 		projects:      projects,
 		secureCookies: secureCookies,
-		mux:           http.NewServeMux(),
+		router:           chi.NewRouter(),
 	}
 
 	s.routes()
@@ -34,118 +37,56 @@ func NewServer(
 }
 
 func (s *Server) Handler() http.Handler {
-	return s.mux
+	return s.router
 }
 
 func (s *Server) routes() {
-	s.mux.HandleFunc("GET /health", s.handleHealth)
+	r := s.router
 
-	// !!User Routes
-	s.mux.Handle("GET /api/auth/me", // wuh
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleMe,
-			),
-		),
-	)
+	r.Get("/health", s.handleHealth)
 
-	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
-	s.mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
-	s.mux.HandleFunc("POST /api/auth/register", s.handleRegister)
+	r.Route("/api", func(r chi.Router) {
+		// Auth endpoints
+		// Logout unprotected - idempotent
+		// absent/invalid sessions can still have coocie cleared
 
-	//  !!Project Routes
-	s.mux.Handle(
-		"GET /api/projects",
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleListProjects,
-			),
-		),
-	)
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", s.handleRegister)
+			r.Post("/login", s.handleLogin)
+			r.Post("/logout", s.handleLogout)
 
-	s.mux.Handle(
-		"POST /api/projects",
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleCreateProject,
-			),
-		),
-	)
+			r.With(s.requireAuth).Get("/me", s.handleMe) 
+		})
 
-	s.mux.Handle(
-		"GET /api/projects/{id}",
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleGetProject,
-			),
-		),
-	)
+		// Public Projects API
 
-	s.mux.Handle(
-		"PUT /api/projects/{id}",
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleUpdateProject,
-			),
-		),
-	)
+		r.Route("/public/projects", func(r chi.Router) {
+			r.Get("/", s.handlePublicProject)
+			r.Get("/{slug}", s.handlePublicProject)
+		})
 
-	s.mux.HandleFunc(
-		"GET /api/public/projects/{slug}",
-		s.handlePublicProject,
-	)
+		// Flowerpress Owner
 
-	s.mux.HandleFunc(
-		"GET /api/public/projects",
-		s.handlePublicProjects,
-	)
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireAuth)
 
-	// Project Actions
+			r.Route("/projects", func(r chi.Router) {
+				r.Get("/", s.handleListProjects)
+				r.Post("/", s.handleCreateProject)
 
-	s.mux.Handle(
-		"POST /api/projects/{id}/publish",
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handlePublishProject,
-			),
-		),
-	)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", s.handleGetProject)
+					r.Put("/", s.handleUpdateProject)
+					r.Delete("/", s.handleDeleteProject)
 
-	s.mux.Handle(
-		"POST /api/projects/{id}/unpublish",
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleUnpublishProject,
-			),
-		),
-	)
-
-	s.mux.Handle(
-		"POST /api/projects/{id}/unlist",
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleUnlistProject,
-			),
-		),
-	)
-
-	s.mux.Handle(
-		"POST /api/projects/{id}/archive",
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleArchiveProject,
-			),
-		),
-	)
-
-	s.mux.Handle(
-		"DELETE /api/projects/{id}",
-		s.requireAuth(
-			http.HandlerFunc(
-				s.handleDeleteProject,
-			),
-		),
-	)
+					r.Post("/publish", s.handlePublicProject)
+					r.Post("/unpublish", s.handleUnpublishProject)
+					r.Post("/unlist", s.handleUnlistProject)
+					r.Post("/archive", s.handleArchiveProject)
+				})
+			})
+		})
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

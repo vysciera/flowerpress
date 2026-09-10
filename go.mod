@@ -9,6 +9,7 @@ require (
 
 require (
 	github.com/ebitengine/purego v0.9.1 // indirect
+	github.com/go-chi/chi/v5 v5.3.2 // indirect
 	github.com/tursodatabase/turso-go-platform-libs v0.7.2 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )
