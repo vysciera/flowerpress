@@ -42,10 +42,10 @@ type placeMediaRequest struct {
 }
 
 type updateMediaPlacementRequest struct {
-	Role		domain.MediaPlacementRole	`json:"role"`
-	Position	int							`json:"position"`
-	Caption		string						`json:"caption"`
-	AltText		string						`json:"alt_text"`
+	Role     domain.MediaPlacementRole `json:"role"`
+	Position int                       `json:"position"`
+	Caption  string                    `json:"caption"`
+	AltText  string                    `json:"alt_text"`
 }
 
 type mediaPlacementResponse struct {
@@ -58,6 +58,11 @@ type mediaPlacementResponse struct {
 	AltText   string                    `json:"alt_text"`
 	CreatedAt time.Time                 `json:"created_at"`
 	UpdatedAt time.Time                 `json:"updated_at"`
+}
+
+type reorderProjectMediaRequest struct {
+	Role         domain.MediaPlacementRole `json:"role"`
+	PlacementIDs []int64                   `json:"placement_ids"`
 }
 
 func (s *Server) handleUpdateMediaPlacement(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +102,7 @@ func (s *Server) handleUpdateMediaPlacement(w http.ResponseWriter, r *http.Reque
 		return
 
 	case errors.Is(err, service.ErrInvalidMediaPlacementRole),
-		 errors.Is(err, service.ErrInvalidMediaPosition):
+		errors.Is(err, service.ErrInvalidMediaPosition):
 
 		writeJSON(
 			w, http.StatusBadRequest,
@@ -426,34 +431,6 @@ func (s *Server) handleListProjectMedia(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, response)
 }
 
-func mediaAssetToResponse(asset *domain.MediaAsset) mediaAssetResponse {
-	return mediaAssetResponse{
-		ID:           asset.ID,
-		OriginalName: asset.OriginalName,
-		MIMEType:     asset.MIMEType,
-		SizeBytes:    asset.SizeBytes,
-		SHA256:       asset.SHA256,
-		Width:        asset.Width,
-		Height:       asset.Height,
-		CreatedAt:    asset.CreatedAt,
-		UpdatedAt:    asset.UpdatedAt,
-	}
-}
-
-func mediaPlacementToResponse(placement *domain.MediaPlacement) mediaPlacementResponse {
-	return mediaPlacementResponse{
-		ID:        placement.ID,
-		AssetID:   placement.AssetID,
-		ProjectID: placement.ProjectID,
-		Role:      placement.Role,
-		Position:  placement.Position,
-		Caption:   placement.Caption,
-		AltText:   placement.AltText,
-		CreatedAt: placement.CreatedAt,
-		UpdatedAt: placement.UpdatedAt,
-	}
-}
-
 func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxMediaRequestSize)
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
@@ -567,6 +544,92 @@ func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 		w, http.StatusCreated,
 		mediaAssetToResponse(asset),
 	)
+}
+
+func (s *Server) handleReorderProjectMedia(w http.ResponseWriter, r *http.Request) {
+	projectID, err := projectIDFromRequest(r)
+	if err != nil || projectID <= 0 {
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid project id",
+			},
+		)
+		return
+	}
+
+	var request reorderProjectMediaRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+
+	err = s.media.ReorderPlacements(
+		r.Context(),
+		projectID,
+		request.Role,
+		request.PlacementIDs,
+	)
+
+	switch {
+	case errors.Is(err, domain.ErrProjectNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "project not found",
+			},
+		)
+		return
+
+	case errors.Is(err, service.ErrInvalidMediaPlacementRole),
+		errors.Is(err, service.ErrInvalidMediaOrder):
+
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": err.Error(),
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func mediaAssetToResponse(asset *domain.MediaAsset) mediaAssetResponse {
+	return mediaAssetResponse{
+		ID:           asset.ID,
+		OriginalName: asset.OriginalName,
+		MIMEType:     asset.MIMEType,
+		SizeBytes:    asset.SizeBytes,
+		SHA256:       asset.SHA256,
+		Width:        asset.Width,
+		Height:       asset.Height,
+		CreatedAt:    asset.CreatedAt,
+		UpdatedAt:    asset.UpdatedAt,
+	}
+}
+
+func mediaPlacementToResponse(placement *domain.MediaPlacement) mediaPlacementResponse {
+	return mediaPlacementResponse{
+		ID:        placement.ID,
+		AssetID:   placement.AssetID,
+		ProjectID: placement.ProjectID,
+		Role:      placement.Role,
+		Position:  placement.Position,
+		Caption:   placement.Caption,
+		AltText:   placement.AltText,
+		CreatedAt: placement.CreatedAt,
+		UpdatedAt: placement.UpdatedAt,
+	}
 }
 
 func mediaIDFromRequest(r *http.Request) (int64, error) {

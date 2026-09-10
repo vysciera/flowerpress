@@ -24,7 +24,8 @@ var (
 	ErrInvalidMediaPlacementRole = errors.New("invalid media placement role")
 	ErrInvalidMediaPosition      = errors.New("invalid media position")
 
-	ErrProjectThumbnailExists	 = errors.New("project already has a thumbnail")
+	ErrProjectThumbnailExists = errors.New("project already has a thumbnail")
+	ErrInvalidMediaOrder      = errors.New("invalid media order")
 )
 
 type byteCounter struct {
@@ -370,6 +371,28 @@ func (s *MediaService) ensureThumbnailAvailable(ctx context.Context, projectID i
 	}
 
 	return nil
+}
+
+func (s *MediaService) ReorderPlacements(
+	ctx context.Context,
+	projectID int64,
+	role domain.MediaPlacementRole,
+	placementIDs []int64,
+) error {
+	if role != domain.MediaPlacementContent && role != domain.MediaPlacementAttachment {
+		return ErrInvalidMediaPlacementRole
+	}
+
+	if _, err := s.projects.ByID(ctx, projectID); err != nil {
+		return err
+	}
+
+	err := s.placements.Reorder(ctx, projectID, role, placementIDs)
+	if errors.Is(err, domain.ErrMediaPlacementOrderMismatch) {
+		return ErrInvalidMediaOrder
+	}
+
+	return err
 }
 
 // validatePlacementPosition ensures thumbnails always have position 0

@@ -72,6 +72,8 @@ func (s *Server) routes() {
 			r.Put("/media/placements/{id}", s.handleUpdateMediaPlacement)
 			r.Delete("/media/placements/{id}", s.handleDeleteMediaPlacement)
 
+			r.Put("/projects/{id}/media/order", s.handleReorderProjectMedia)
+
 			// Projects
 			r.Post("/projects/{id}/media", s.handlePlaceMedia)
 

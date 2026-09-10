@@ -120,7 +120,14 @@ func (r *MediaPlacementRepository) ListByProject(ctx context.Context, projectID 
 				updated_at
 			FROM media_placements
 			WHERE project_id = ?
-			ORDER BY position ASC, id ASC
+			ORDER BY
+				CASE role
+					WHEN 'thumbnail' THEN 0
+					WHEN 'content' THEN 1
+					WHEN 'attachment' THEN 2
+				END,
+				position ASC,
+				id ASC
 		`,
 		projectID,
 	)
@@ -213,6 +220,103 @@ func (r *MediaPlacementRepository) Delete(ctx context.Context, id int64) error {
 
 	if rowsAffected == 0 {
 		return domain.ErrMediaPlacementNotFound
+	}
+
+	return nil
+}
+
+func (r *MediaPlacementRepository) Reorder(ctx context.Context, projectID int64, role domain.MediaPlacementRole, placementIDs []int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin media placement reorder: %w", err)
+	}
+
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	rows, err := tx.QueryContext(
+		ctx,
+		`
+			SELECT id
+			FROM media_placements
+			WHERE project_id = ?
+				AND role = ?
+		`,
+		projectID,
+		role,
+	)
+	if err != nil {
+		return fmt.Errorf("list media placements for reorder: %w", err)
+	}
+	defer rows.Close()
+
+	existing := make(map[int64]struct{})
+
+	for rows.Next() {
+		var id int64
+
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("scan media placement id: %w", err)
+		}
+
+		existing[id] = struct{}{}
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate media placements: %w", err)
+	}
+
+	if len(existing) != len(placementIDs) {
+		return domain.ErrMediaPlacementOrderMismatch
+	}
+
+	seen := make(map[int64]struct{}, len(placementIDs))
+
+	for _, id := range placementIDs {
+		if _, duplicate := seen[id]; duplicate {
+			return domain.ErrMediaPlacementOrderMismatch
+		}
+
+		if _, exists := existing[id]; !exists {
+			return domain.ErrMediaPlacementOrderMismatch
+		}
+
+		seen[id] = struct{}{}
+	}
+
+	for position, id := range placementIDs {
+		result, err := tx.ExecContext(
+			ctx,
+			`
+				UPDATE media_placements
+				SET position = ?,
+					updateD_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+					AND project_id = ?
+					AND role = ?
+			`,
+			position,
+			id,
+			projectID,
+			role,
+		)
+		if err != nil {
+			return fmt.Errorf("reorder media placement %d: %w", id, err)
+		}
+
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("media placement reorder rows affected: %w", err)
+		}
+
+		if affected != 1 {
+			return domain.ErrMediaPlacementOrderMismatch
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit media placement reorder: %w", err)
 	}
 
 	return nil
