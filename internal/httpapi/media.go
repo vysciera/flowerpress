@@ -181,7 +181,7 @@ func (s *Server) handleGetMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(
-		w, http.StatusOK,
+		w, http.StatusOK, 
 		mediaAssetToResponse(asset),
 	)
 }
@@ -204,10 +204,7 @@ func (s *Server) handleListMedia(w http.ResponseWriter, r *http.Request) {
 		response = append(response, mediaAssetToResponse(asset))
 	}
 
-	writeJSON(
-		w, http.StatusOK,
-		response,
-	)
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) handleMediaContent(w http.ResponseWriter, r *http.Request) {
@@ -262,6 +259,47 @@ func (s *Server) handleMediaContent(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, content); err != nil {
 		return
 	}
+}
+
+func (s *Server) handleListProjectMedia(w http.ResponseWriter, r *http.Request) {
+	projectID, err := projectIDFromRequest(r)
+	if err != nil || projectID <= 0 {
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid project id",
+			},
+		)
+		return
+	}
+
+	placements, err := s.media.ListProjectMedia(r.Context(), projectID)
+	switch {
+	case errors.Is(err, domain.ErrProjectNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "project not found",
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	response := make([]mediaPlacementResponse, 0, len(placements))
+	for _, placement := range placements {
+		response = append(response, mediaPlacementToResponse(placement))
+	}
+
+	writeJSON(w, http.StatusOK, response)
 }
 
 func mediaAssetToResponse(asset *domain.MediaAsset) mediaAssetResponse {

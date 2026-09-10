@@ -818,3 +818,48 @@ func TestPlaceMedia(t *testing.T) {
 		t.Fatalf("expected content role, got %q", placement.Role)
 	}
 }
+
+func TestListProjectMediaRequiresAuthentication(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/projects/1/media",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			response.Code,
+		)
+	}
+}
+
+func TestListProjectMediaNotFound(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/projects/999/media",
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusNotFound,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+}
