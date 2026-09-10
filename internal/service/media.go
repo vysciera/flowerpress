@@ -131,6 +131,20 @@ func (s *MediaService) UploadAsset(ctx context.Context, originalName string, mim
 	return asset, nil
 }
 
+func (s *MediaService) OpenAssetContent(ctx context.Context, id int64) (*domain.MediaAsset, io.ReadCloser, error) {
+	asset, err := s.assets.ByID(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	content, err := s.storage.Open(ctx, asset.StorageKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open media content: %w", err)
+	}
+
+	return asset, content, nil
+}
+
 func NewMediaService(
 	assets domain.MediaAssetRepository,
 	placements domain.MediaPlacementRepository,

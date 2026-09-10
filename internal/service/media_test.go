@@ -446,3 +446,58 @@ func TestMediaServiceUploadAssetDimensions(t *testing.T) {
 		)
 	}
 }
+
+func TestMediaServiceOpenAssetContent(t *testing.T) {
+	media := testMediaService(t)
+	ctx := context.Background()
+
+	expected := []byte("flowerpress media content")
+
+	asset, err := media.UploadAsset(
+		ctx,
+		"flower.txt",
+		"text/plain",
+		bytes.NewReader(expected),
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("upload asset: %v", err)
+	}
+
+	found, content, err := media.OpenAssetContent(ctx, asset.ID)
+	if err != nil {
+		t.Fatalf("open asset content: %v", err)
+	}
+	defer content.Close()
+
+	if found.ID != asset.ID {
+		t.Fatalf(
+			"expected asset ID %d, got %d",
+			asset.ID,
+			found.ID,
+		)
+	}
+
+	actual, err := io.ReadAll(content)
+	if err != nil {
+		t.Fatalf("read asset content: %v", err)
+	}
+
+	if !bytes.Equal(actual, expected) {
+		t.Fatalf("expected content %q, got %q", expected, actual)
+	}
+}
+
+func TestMediaServiceOpenAssetContentNotFound(t *testing.T) {
+	media := testMediaService(t)
+
+	_, _, err := media.OpenAssetContent(
+		context.Background(),
+		999,
+	)
+
+	if !errors.Is(err, domain.ErrMediaAssetNotFound) {
+		t.Fatalf("expected ErrMediaAssetNotFound, got %v", err)
+	}
+}
