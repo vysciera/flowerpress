@@ -13,7 +13,7 @@ type Server struct {
 	sessions      *service.SessionService
 	projects      *service.ProjectService
 	secureCookies bool
-	
+
 	router chi.Router
 }
 
@@ -28,7 +28,7 @@ func NewServer(
 		sessions:      sessions,
 		projects:      projects,
 		secureCookies: secureCookies,
-		router:           chi.NewRouter(),
+		router:        chi.NewRouter(),
 	}
 
 	s.routes()
@@ -46,45 +46,29 @@ func (s *Server) routes() {
 	r.Get("/health", s.handleHealth)
 
 	r.Route("/api", func(r chi.Router) {
-		// Auth endpoints
-		// Logout unprotected - idempotent
-		// absent/invalid sessions can still have coocie cleared
+		r.Post("/auth/register", s.handleRegister)
+		r.Post("/auth/login", s.handleLogin)
+		r.Post("/auth/logout", s.handleLogout)
 
-		r.Route("/auth", func(r chi.Router) {
-			r.Post("/register", s.handleRegister)
-			r.Post("/login", s.handleLogin)
-			r.Post("/logout", s.handleLogout)
-
-			r.With(s.requireAuth).Get("/me", s.handleMe) 
-		})
-
-		// Public Projects API
-
-		r.Route("/public/projects", func(r chi.Router) {
-			r.Get("/", s.handlePublicProject)
-			r.Get("/{slug}", s.handlePublicProject)
-		})
-
-		// Flowerpress Owner
+		r.Get("/public/projects", s.handlePublicProjects)
+		r.Get("/public/projects/{slug}", s.handlePublicProject)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
 
-			r.Route("/projects", func(r chi.Router) {
-				r.Get("/", s.handleListProjects)
-				r.Post("/", s.handleCreateProject)
+			r.Get("/auth/me", s.handleMe)
 
-				r.Route("/{id}", func(r chi.Router) {
-					r.Get("/", s.handleGetProject)
-					r.Put("/", s.handleUpdateProject)
-					r.Delete("/", s.handleDeleteProject)
+			r.Get("/projects", s.handleListProjects)
+			r.Post("/projects", s.handleCreateProject)
 
-					r.Post("/publish", s.handlePublicProject)
-					r.Post("/unpublish", s.handleUnpublishProject)
-					r.Post("/unlist", s.handleUnlistProject)
-					r.Post("/archive", s.handleArchiveProject)
-				})
-			})
+			r.Get("/projects/{id}", s.handleGetProject)
+			r.Put("/projects/{id}", s.handleUpdateProject)
+			r.Delete("/projects/{id}", s.handleDeleteProject)
+
+			r.Post("/projects/{id}/publish", s.handlePublishProject)
+			r.Post("/projects/{id}/unpublish", s.handleUnpublishProject)
+			r.Post("/projects/{id}/unlist", s.handleUnlistProject)
+			r.Post("/projects/{id}/archive", s.handleArchiveProject)
 		})
 	})
 }

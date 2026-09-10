@@ -50,8 +50,8 @@ func projectToResponse(project *domain.Project) projectResponse {
 
 func projectIDFromRequest(r *http.Request) (int64, error) {
 	return strconv.ParseInt(chi.URLParam(r, "id"),
-	10,
-	64)
+		10,
+		64)
 }
 
 // !!Server methods
