@@ -107,6 +107,15 @@ func (s *Server) handleUpdateMediaPlacement(w http.ResponseWriter, r *http.Reque
 		)
 		return
 
+	case errors.Is(err, service.ErrProjectThumbnailExists):
+		writeJSON(
+			w, http.StatusConflict,
+			map[string]string{
+				"error": err.Error(),
+			},
+		)
+		return
+
 	case err != nil:
 		writeJSON(
 			w, http.StatusInternalServerError,
@@ -231,6 +240,15 @@ func (s *Server) handlePlaceMedia(w http.ResponseWriter, r *http.Request) {
 
 		writeJSON(
 			w, http.StatusBadRequest,
+			map[string]string{
+				"error": err.Error(),
+			},
+		)
+		return
+
+	case errors.Is(err, service.ErrProjectThumbnailExists):
+		writeJSON(
+			w, http.StatusConflict,
 			map[string]string{
 				"error": err.Error(),
 			},

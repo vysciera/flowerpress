@@ -23,6 +23,8 @@ var (
 	ErrInvalidMediaDimensions    = errors.New("invalid media dimensions")
 	ErrInvalidMediaPlacementRole = errors.New("invalid media placement role")
 	ErrInvalidMediaPosition      = errors.New("invalid media position")
+
+	ErrProjectThumbnailExists	 = errors.New("project already has a thumbnail")
 )
 
 type byteCounter struct {
@@ -272,6 +274,12 @@ func (s *MediaService) UpdatePlacement(
 		return nil, err
 	}
 
+	if role == domain.MediaPlacementThumbnail {
+		if err := s.ensureThumbnailAvailable(ctx, placement.ProjectID, placement.ID); err != nil {
+			return nil, err
+		}
+	}
+
 	placement.Role = role
 	placement.Position = position
 	placement.Caption = caption
@@ -309,6 +317,12 @@ func (s *MediaService) PlaceAsset(
 		return nil, err
 	}
 
+	if role == domain.MediaPlacementThumbnail {
+		if err := s.ensureThumbnailAvailable(ctx, projectID, 0); err != nil {
+			return nil, err
+		}
+	}
+
 	placement := &domain.MediaPlacement{
 		AssetID:   assetID,
 		ProjectID: projectID,
@@ -335,4 +349,25 @@ func (s *MediaService) ListProjectMedia(ctx context.Context, projectID int64) ([
 
 func (s *MediaService) RemovePlacement(ctx context.Context, placementID int64) error {
 	return s.placements.Delete(ctx, placementID)
+}
+
+func (s *MediaService) ensureThumbnailAvailable(ctx context.Context, projectID int64, exceptPlacementID int64) error {
+	placements, err := s.placements.ListByProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+
+	for _, placement := range placements {
+		if placement.Role != domain.MediaPlacementThumbnail {
+			continue
+		}
+
+		if placement.ID == exceptPlacementID {
+			continue
+		}
+
+		return ErrProjectThumbnailExists
+	}
+
+	return nil
 }
