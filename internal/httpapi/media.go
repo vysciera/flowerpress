@@ -4,7 +4,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"flowerpress/internal/domain"
 	"flowerpress/internal/service"
@@ -28,6 +31,45 @@ type mediaAssetResponse struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (s *Server) handleGetMedia(w http.ResponseWriter, r *http.Request) {
+	mediaID, err := mediaIDFromRequest(r)
+	if err != nil || mediaID <= 0 {
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid media id",
+			},
+		)
+		return
+	}
+
+	asset, err := s.media.AssetByID(r.Context(), mediaID)
+	switch {
+	case errors.Is(err, domain.ErrMediaAssetNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "media asset not found",
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	writeJSON(
+		w, http.StatusOK,
+		mediaAssetToResponse(asset),
+	)
 }
 
 func (s *Server) handleListMedia(w http.ResponseWriter, r *http.Request) {
@@ -180,5 +222,13 @@ func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 	writeJSON(
 		w, http.StatusCreated,
 		mediaAssetToResponse(asset),
+	)
+}
+
+func mediaIDFromRequest(r *http.Request) (int64, error) {
+	return strconv.ParseInt(
+		chi.URLParam(r, "id"),
+		10,
+		64,
 	)
 }
