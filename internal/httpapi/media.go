@@ -3,8 +3,10 @@ package httpapi
 import (
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -254,17 +256,6 @@ func (s *Server) handlePlaceMedia(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 
-	case errors.Is(err, service.ErrInvalidMediaPlacementRole),
-		errors.Is(err, service.ErrInvalidMediaPosition):
-
-		writeJSON(
-			w, http.StatusBadRequest,
-			map[string]string{
-				"error": err.Error(),
-			},
-		)
-		return
-
 	case errors.Is(err, service.ErrProjectThumbnailExists):
 		writeJSON(
 			w, http.StatusConflict,
@@ -395,6 +386,11 @@ func (s *Server) handleMediaContent(w http.ResponseWriter, r *http.Request) {
 
 	// Don't MIMESniff me
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set(
+		"Content-Disposition",
+		publicMediaDisposition(asset),
+	)
+
 	w.WriteHeader(http.StatusOK)
 
 	// Headers may have already been sent
@@ -678,6 +674,87 @@ func (s *Server) handlePublicProjectMedia(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) handlePublicMediaContent(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+
+	assetID, err := publicMediaAssetIDFromRequest(r)
+	if err != nil || assetID <= 0 {
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid media asset id",
+			},
+		)
+		return
+	}
+
+	project, err := s.projects.ByPublicSlug(r.Context(), slug)
+	switch {
+	case errors.Is(err, domain.ErrProjectNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "project not found",
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	asset, content, err := s.media.OpenProjectAssetContent(
+		r.Context(),
+		project.ID,
+		assetID,
+	)
+
+	switch {
+	case errors.Is(err, service.ErrMediaAssetNotPlaced),
+		errors.Is(err, domain.ErrMediaAssetNotFound),
+		errors.Is(err, domain.ErrProjectNotFound):
+
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "media not found",
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	defer content.Close()
+
+	w.Header().Set("Content-Type", asset.MIMEType)
+	w.Header().Set("Content-Length", strconv.FormatInt(
+		asset.SizeBytes, 10,
+	))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set(
+		"Content-Disposition",
+		publicMediaDisposition(asset),
+	)
+
+	w.WriteHeader(http.StatusOK)
+
+	_, _ = io.Copy(w, content)
+}
+
 func mediaAssetToResponse(asset *domain.MediaAsset) mediaAssetResponse {
 	return mediaAssetResponse{
 		ID:           asset.ID,
@@ -729,5 +806,34 @@ func mediaPlacementIDFromRequest(r *http.Request) (int64, error) {
 	return strconv.ParseInt(
 		chi.URLParam(r, "id"),
 		10, 64,
+	)
+}
+
+func publicMediaAssetIDFromRequest(r *http.Request) (int64, error) {
+	return strconv.ParseInt(
+		chi.URLParam(r, "assetID"),
+		10, 64,
+	)
+}
+
+func publicMediaDisposition(asset *domain.MediaAsset) string {
+	disposition := "attachment"
+
+	switch {
+	case strings.HasPrefix(asset.MIMEType, "audio/"):
+		disposition = "inline"
+
+	case strings.HasPrefix(asset.MIMEType, "image/") && asset.MIMEType != "image/svg+xml":
+		disposition = "inline"
+
+	case asset.MIMEType == "application/pdf":
+		disposition = "inline"
+	}
+
+	return mime.FormatMediaType(
+		disposition,
+		map[string]string{
+			"filename": asset.OriginalName,
+		},
 	)
 }

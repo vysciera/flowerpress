@@ -56,6 +56,9 @@ func (s *Server) routes() {
 		r.Get("/public/projects", s.handlePublicProjects)
 		r.Get("/public/projects/{slug}", s.handlePublicProject)
 
+		r.Get("/public/projects/{slug}/media", s.handlePublicProjectMedia)
+		r.Get("/public/projects/{slug}/media/{assetID}/content", s.handlePublicMediaContent)
+
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
 
@@ -90,7 +93,6 @@ func (s *Server) routes() {
 			r.Post("/projects/{id}/archive", s.handleArchiveProject)
 
 			r.Get("/projects/{id}/media", s.handleListProjectMedia)
-			r.Get("/public/projects/{slug}/media", s.handlePublicProjectMedia)
 		})
 	})
 }

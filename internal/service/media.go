@@ -26,6 +26,7 @@ var (
 
 	ErrProjectThumbnailExists = errors.New("project already has a thumbnail")
 	ErrInvalidMediaOrder      = errors.New("invalid media order")
+	ErrMediaAssetNotPlaced    = errors.New("media asset is not placed on project")
 )
 
 type byteCounter struct {
@@ -146,6 +147,28 @@ func (s *MediaService) OpenAssetContent(ctx context.Context, id int64) (*domain.
 	}
 
 	return asset, content, nil
+}
+
+func (s *MediaService) OpenProjectAssetContent(ctx context.Context, projectID, assetID int64) (*domain.MediaAsset, io.ReadCloser, error) {
+	placements, err := s.ListProjectMedia(ctx, projectID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	found := false
+
+	for _, placement := range placements {
+		if placement.AssetID == assetID {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, nil, ErrMediaAssetNotPlaced
+	}
+
+	return s.OpenAssetContent(ctx, assetID)
 }
 
 func NewMediaService(
