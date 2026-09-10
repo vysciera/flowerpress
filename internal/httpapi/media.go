@@ -33,6 +33,120 @@ type mediaAssetResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type placeMediaRequest struct {
+	AssetID  int64                     `json:"asset_id"`
+	Role     domain.MediaPlacementRole `json:"role"`
+	Position int                       `json:"position"`
+	Caption  string                    `json:"caption"`
+	AltText  string                    `json:"alt_text"`
+}
+
+type mediaPlacementResponse struct {
+	ID        int64                     `json:"id"`
+	AssetID   int64                     `json:"asset_id"`
+	ProjectID int64                     `json:"project_id"`
+	Role      domain.MediaPlacementRole `json:"role"`
+	Position  int                       `json:"position"`
+	Caption   string                    `json:"caption"`
+	AltText   string                    `json:"alt_text"`
+	CreatedAt time.Time                 `json:"created_at"`
+	UpdatedAt time.Time                 `json:"updated_at"`
+}
+
+func (s *Server) handlePlaceMedia(w http.ResponseWriter, r *http.Request) {
+	projectID, err := projectIDFromRequest(r)
+	if err != nil || projectID <= 0 {
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid project id",
+			},
+		)
+		return
+	}
+
+	var request placeMediaRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+
+	if request.AssetID <= 0 {
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid media asset id",
+			},
+		)
+		return
+	}
+
+	placement, err := s.media.PlaceAsset(
+		r.Context(),
+		projectID,
+		request.AssetID,
+		request.Role,
+		request.Position,
+		request.Caption,
+		request.AltText,
+	)
+
+	switch {
+	case errors.Is(err, domain.ErrProjectNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "project not found",
+			},
+		)
+		return
+
+	case errors.Is(err, domain.ErrMediaAssetNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "media asset not found",
+			},
+		)
+		return
+
+	case errors.Is(err, service.ErrInvalidMediaPlacementRole),
+		errors.Is(err, service.ErrInvalidMediaPosition):
+
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "media asset not found",
+			},
+		)
+		return
+
+	case errors.Is(err, service.ErrInvalidMediaPlacementRole),
+		errors.Is(err, service.ErrInvalidMediaPosition):
+
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": err.Error(),
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	writeJSON(
+		w, http.StatusCreated,
+		mediaPlacementToResponse(placement),
+	)
+}
+
 func (s *Server) handleGetMedia(w http.ResponseWriter, r *http.Request) {
 	mediaID, err := mediaIDFromRequest(r)
 	if err != nil || mediaID <= 0 {
@@ -161,6 +275,20 @@ func mediaAssetToResponse(asset *domain.MediaAsset) mediaAssetResponse {
 		Height:       asset.Height,
 		CreatedAt:    asset.CreatedAt,
 		UpdatedAt:    asset.UpdatedAt,
+	}
+}
+
+func mediaPlacementToResponse(placement *domain.MediaPlacement) mediaPlacementResponse {
+	return mediaPlacementResponse{
+		ID:        placement.ID,
+		AssetID:   placement.AssetID,
+		ProjectID: placement.ProjectID,
+		Role:      placement.Role,
+		Position:  placement.Position,
+		Caption:   placement.Caption,
+		AltText:   placement.AltText,
+		CreatedAt: placement.CreatedAt,
+		UpdatedAt: placement.UpdatedAt,
 	}
 }
 

@@ -67,6 +67,8 @@ func (s *Server) routes() {
 			r.Get("/media/{id}", s.handleGetMedia)
 			r.Get("/media/{id}/content", s.handleMediaContent)
 
+			r.Post("/projects/{id}/media", s.handlePlaceMedia)
+
 			r.Get("/projects", s.handleListProjects)
 			r.Post("/projects", s.handleCreateProject)
 
