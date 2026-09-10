@@ -181,7 +181,7 @@ func (s *Server) handleGetMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(
-		w, http.StatusOK, 
+		w, http.StatusOK,
 		mediaAssetToResponse(asset),
 	)
 }
