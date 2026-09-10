@@ -2,8 +2,8 @@ package service
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -288,7 +288,7 @@ func TestMediaServiceUploadAsset(t *testing.T) {
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("upload asset: %v",	err)
+		t.Fatalf("upload asset: %v", err)
 	}
 
 	if asset.ID == 0 {
@@ -317,7 +317,7 @@ func TestMediaServiceUploadAsset(t *testing.T) {
 
 	expectedHash := sha256.Sum256(content)
 	if asset.SHA256 != hex.EncodeToString(expectedHash[:]) {
-		t.Fatalf("unexpected SHA256 %q",	asset.SHA256)
+		t.Fatalf("unexpected SHA256 %q", asset.SHA256)
 	}
 }
 
@@ -348,7 +348,7 @@ func TestMediaServiceUploadAssetDeduplicates(t *testing.T) {
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("upload second asset: %v",	err)
+		t.Fatalf("upload second asset: %v", err)
 	}
 
 	if first.ID != second.ID {
@@ -361,11 +361,11 @@ func TestMediaServiceUploadAssetDeduplicates(t *testing.T) {
 
 	assets, err := media.ListAssets(ctx)
 	if err != nil {
-		t.Fatalf("list assets: %v",	err)
+		t.Fatalf("list assets: %v", err)
 	}
 
 	if len(assets) != 1 {
-		t.Fatalf("expected 1 asset, got %d",	len(assets))
+		t.Fatalf("expected 1 asset, got %d", len(assets))
 	}
 }
 

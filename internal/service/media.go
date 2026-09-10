@@ -33,7 +33,7 @@ type MediaService struct {
 	assets     domain.MediaAssetRepository
 	placements domain.MediaPlacementRepository
 	projects   domain.ProjectRepository
-	storage	   MediaStorage
+	storage    MediaStorage
 }
 
 func (c *byteCounter) Write(p []byte) (int, error) {
@@ -63,10 +63,10 @@ func (s *MediaService) UploadAsset(ctx context.Context, originalName string, mim
 		return nil, ErrMediaMIMETypeRequired
 
 	case source == nil:
-			return nil, errors.New("media source is required")
+		return nil, errors.New("media source is required")
 
 	case width != nil && *width <= 0:
-			return nil, ErrInvalidMediaDimensions
+		return nil, ErrInvalidMediaDimensions
 
 	case height != nil && *height <= 0:
 		return nil, ErrInvalidMediaDimensions
@@ -103,13 +103,13 @@ func (s *MediaService) UploadAsset(ctx context.Context, originalName string, mim
 	}
 
 	asset := &domain.MediaAsset{
-		StorageKey:		storageKey,
-		OriginalName:	originalName,
-		MIMEType:		mimeType,
-		SizeBytes:		counter.n,
-		SHA256:			hash,
-		Width:			width,
-		Height:			height,
+		StorageKey:   storageKey,
+		OriginalName: originalName,
+		MIMEType:     mimeType,
+		SizeBytes:    counter.n,
+		SHA256:       hash,
+		Width:        width,
+		Height:       height,
 	}
 
 	if err := s.assets.Create(ctx, asset); err != nil {
@@ -133,7 +133,7 @@ func (s *MediaService) UploadAsset(ctx context.Context, originalName string, mim
 
 func NewMediaService(
 	assets domain.MediaAssetRepository,
-	placements domain.MediaPlacementRepository, 
+	placements domain.MediaPlacementRepository,
 	projects domain.ProjectRepository,
 	storage MediaStorage,
 ) *MediaService {
@@ -141,7 +141,7 @@ func NewMediaService(
 		assets:     assets,
 		placements: placements,
 		projects:   projects,
-		storage: storage,
+		storage:    storage,
 	}
 }
 
