@@ -265,8 +265,8 @@ func (s *MediaService) UpdatePlacement(
 		return nil, ErrInvalidMediaPlacementRole
 	}
 
-	if position < 0 {
-		return nil, ErrInvalidMediaPosition
+	if err := validatePlacementPosition(role, position); err != nil {
+		return nil, err
 	}
 
 	placement, err := s.placements.ByID(ctx, placementID)
@@ -305,8 +305,8 @@ func (s *MediaService) PlaceAsset(
 		return nil, ErrInvalidMediaPlacementRole
 	}
 
-	if position < 0 {
-		return nil, ErrInvalidMediaPosition
+	if err := validatePlacementPosition(role, position); err != nil {
+		return nil, err
 	}
 
 	if _, err := s.projects.ByID(ctx, projectID); err != nil {
@@ -367,6 +367,19 @@ func (s *MediaService) ensureThumbnailAvailable(ctx context.Context, projectID i
 		}
 
 		return ErrProjectThumbnailExists
+	}
+
+	return nil
+}
+
+// validatePlacementPosition ensures thumbnails always have position 0
+func validatePlacementPosition(role domain.MediaPlacementRole, position int) error {
+	if position < 0 {
+		return ErrInvalidMediaPosition
+	}
+
+	if role == domain.MediaPlacementThumbnail && position != 0 {
+		return ErrInvalidMediaPosition
 	}
 
 	return nil
