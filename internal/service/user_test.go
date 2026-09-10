@@ -62,7 +62,7 @@ func TestUserServiceRegister(t *testing.T) {
 }
 
 func TestUserServiceRegisterDuplicateUsername(t *testing.T) {
-	return
+	t.Skip()
 
 	users := testUserService(t)
 	ctx := context.Background()

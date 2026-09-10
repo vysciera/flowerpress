@@ -3,13 +3,13 @@ module flowerpress
 go 1.25.6
 
 require (
+	github.com/go-chi/chi/v5 v5.3.2
 	golang.org/x/crypto v0.55.0
 	turso.tech/database/tursogo v0.7.2
 )
 
 require (
 	github.com/ebitengine/purego v0.9.1 // indirect
-	github.com/go-chi/chi/v5 v5.3.2 // indirect
 	github.com/tursodatabase/turso-go-platform-libs v0.7.2 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )
