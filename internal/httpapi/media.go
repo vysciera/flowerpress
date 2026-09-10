@@ -11,36 +11,60 @@ import (
 )
 
 const (
-	maxMediaUploadSize int64 = 100 << 20 // 100 MiB
+	maxMediaUploadSize  int64 = 100 << 20                      // 100 MiB
 	maxMediaRequestSize int64 = maxMediaUploadSize + (1 << 20) // room for multipart headers + 100 MiB file
 )
 
 type mediaAssetResponse struct {
 	ID int64 `json:"id"`
 
-	OriginalName	string `json:"original_name"`
-	MIMEType		string `json:"mime_type"`
-	SizeBytes		int64  `json:"size_bytes"`
-	SHA256			string `json:"sha256"`
+	OriginalName string `json:"original_name"`
+	MIMEType     string `json:"mime_type"`
+	SizeBytes    int64  `json:"size_bytes"`
+	SHA256       string `json:"sha256"`
 
-	Width	*int `json:"width"`
-	Height	*int `json:"height"`
+	Width  *int `json:"width"`
+	Height *int `json:"height"`
 
-	CreatedAt	time.Time `json:"created_at"`
-	UpdatedAt	time.Time `json:"updated_at"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (s *Server) handleListMedia(w http.ResponseWriter, r *http.Request) {
+	assets, err := s.media.ListAssets(r.Context())
+	if err != nil {
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	// Empty responses return [], not nil
+	response := make([]mediaAssetResponse, 0, len(assets))
+	for _, asset := range assets {
+		response = append(response, mediaAssetToResponse(asset))
+	}
+
+	writeJSON(
+		w, http.StatusOK,
+		response,
+	)
 }
 
 func mediaAssetToResponse(asset *domain.MediaAsset) mediaAssetResponse {
 	return mediaAssetResponse{
-		ID:				asset.ID,
-		OriginalName:	asset.OriginalName,
-		MIMEType:		asset.MIMEType,
-		SizeBytes:		asset.SizeBytes,
-		SHA256:			asset.SHA256,
-		Width:			asset.Width,
-		Height:			asset.Height,
-		CreatedAt:		asset.CreatedAt,
-		UpdatedAt:		asset.UpdatedAt,
+		ID:           asset.ID,
+		OriginalName: asset.OriginalName,
+		MIMEType:     asset.MIMEType,
+		SizeBytes:    asset.SizeBytes,
+		SHA256:       asset.SHA256,
+		Width:        asset.Width,
+		Height:       asset.Height,
+		CreatedAt:    asset.CreatedAt,
+		UpdatedAt:    asset.UpdatedAt,
 	}
 }
 
@@ -82,7 +106,7 @@ func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	defer file.Close() 
+	defer file.Close()
 
 	if header.Size > maxMediaUploadSize {
 		writeJSON(
@@ -94,7 +118,7 @@ func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Don't inherently trust MIME type supplied by client 
+	// Don't inherently trust MIME type supplied by client
 	// Read first 512 bytes, let net/http inspect
 	// Rewind multipart file before passing to MediaService
 	headerBytes := make([]byte, 512)
@@ -132,16 +156,16 @@ func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case errors.Is(err, service.ErrMediaOriginalNameRequired),
-		 errors.Is(err, service.ErrMediaMIMETypeRequired),
-		 errors.Is(err, service.ErrInvalidMediaDimensions):
+		errors.Is(err, service.ErrMediaMIMETypeRequired),
+		errors.Is(err, service.ErrInvalidMediaDimensions):
 
-		 writeJSON(
-			 w, http.StatusBadRequest,
-			 map[string]string{
-				 "error": err.Error(),
-			 },
-		 )
-		 return
+		writeJSON(
+			w, http.StatusBadRequest,
+			map[string]string{
+				"error": err.Error(),
+			},
+		)
+		return
 
 	case err != nil:
 		writeJSON(

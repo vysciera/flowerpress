@@ -20,7 +20,7 @@ func multipartUpload(t *testing.T, filename, contentType string, content []byte)
 
 	header.Set(
 		"Content-Disposition",
-		`form-data; name="file"; filename="` + filename + `"`,
+		`form-data; name="file"; filename="`+filename+`"`,
 	)
 
 	header.Set("Content-Type", contentType)
@@ -233,5 +233,164 @@ func TestUploadMediaDeduplicates(t *testing.T) {
 			"expected original asset metadata to be reused, got %q",
 			second.OriginalName,
 		)
+	}
+}
+
+func TestListMediaRequiresAuthentication(t *testing.T) {
+	server := testServer(t)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/media",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			response.Code,
+		)
+	}
+}
+
+func TestListMediaEmpty(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/media",
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var assets []mediaAssetResponse
+
+	if err := json.NewDecoder(response.Body).Decode(&assets); err != nil {
+		t.Fatalf("decode media list: %v", err)
+	}
+
+	if len(assets) != 0 {
+		t.Fatalf(
+			"expected empty media library, got %d assets",
+			len(assets),
+		)
+	}
+}
+
+func TestListMedia(t *testing.T) {
+	server := testServer(t)
+	cookie := loginTestUser(t, server)
+
+	upload := func(filename string, content []byte) mediaAssetResponse {
+		t.Helper()
+
+		body, contentType := multipartUpload(
+			t,
+			filename,
+			"text/plain",
+			content,
+		)
+
+		request := httptest.NewRequest(
+			http.MethodPost,
+			"/api/media",
+			body,
+		)
+
+		request.Header.Set(
+			"Content-Type",
+			contentType,
+		)
+
+		request.AddCookie(cookie)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+
+		if response.Code != http.StatusCreated {
+			t.Fatalf(
+				"upload %q: expected %d, got %d: %s",
+				filename,
+				http.StatusCreated,
+				response.Code,
+				response.Body.String(),
+			)
+		}
+
+		var asset mediaAssetResponse
+
+		if err := json.NewDecoder(response.Body).Decode(&asset); err != nil {
+			t.Fatalf("decode uploaded asset: %v", err)
+		}
+
+		return asset
+	}
+
+	first := upload(
+		"first.txt",
+		[]byte("first flower"),
+	)
+
+	second := upload(
+		"second.txt",
+		[]byte("second flower"),
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/media",
+		nil,
+	)
+
+	request.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var assets []mediaAssetResponse
+
+	if err := json.NewDecoder(response.Body).Decode(&assets); err != nil {
+		t.Fatalf("decode media list: %v", err)
+	}
+
+	if len(assets) != 2 {
+		t.Fatalf("expected 2 media assets, got %d", len(assets))
+	}
+
+	ids := make(map[int64]bool)
+	for _, asset := range assets {
+		ids[asset.ID] = true
+	}
+
+	if !ids[first.ID] {
+		t.Fatalf("expected media asset ID %d", first.ID)
+	}
+
+	if !ids[second.ID] {
+		t.Fatalf("expected media asset ID %d", second.ID)
 	}
 }
