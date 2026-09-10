@@ -11,11 +11,11 @@ import (
 )
 
 var (
-	ErrUsernameRequired 		  = errors.New("username is required")
-	ErrPasswordTooShort 		  = errors.New("password must be at least 8 characters")
-	ErrUsernameTaken     		  = errors.New("username already taken")
-	ErrInvalidCredentials 		  = errors.New("invalid credentials")
-	ErrOwnerAlreadyRegistered	  = errors.New("flowerpress owner is already registered")
+	ErrUsernameRequired       = errors.New("username is required")
+	ErrPasswordTooShort       = errors.New("password must be at least 8 characters")
+	ErrUsernameTaken          = errors.New("username already taken")
+	ErrInvalidCredentials     = errors.New("invalid credentials")
+	ErrOwnerAlreadyRegistered = errors.New("flowerpress owner is already registered")
 )
 
 type UserService struct {
@@ -43,7 +43,7 @@ func (s *UserService) Register(ctx context.Context, username string, password st
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if hasOwner {
 		return nil, ErrOwnerAlreadyRegistered
 	}

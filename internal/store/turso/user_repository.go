@@ -193,7 +193,7 @@ func (r *UserRepository) ByID(ctx context.Context, id int64) (*domain.User, erro
 
 func (r *UserRepository) HasAny(ctx context.Context) (bool, error) {
 	var exists int
-	
+
 	err := r.db.QueryRowContext(
 		ctx,
 		`

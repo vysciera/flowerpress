@@ -158,8 +158,8 @@ var migrations = []Migration{
 	`,
 	},
 	{
-		Version:	5,
-		Name:	"enforce single owner",
+		Version: 5,
+		Name:    "enforce single owner",
 		SQL: `
 			ALTER TABLE users
 			ADD COLUMN owner_slot INTEGER
