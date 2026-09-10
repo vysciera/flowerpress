@@ -65,6 +65,20 @@ type reorderProjectMediaRequest struct {
 	PlacementIDs []int64                   `json:"placement_ids"`
 }
 
+type publicProjectMediaResponse struct {
+	Placement mediaPlacementResponse   `json:"placement"`
+	Asset     publicMediaAssetResponse `json:"asset"`
+}
+
+type publicMediaAssetResponse struct {
+	ID           int64  `json:"id"`
+	OriginalName string `json:"original_name"`
+	MIMEType     string `json:"mime_type"`
+	SizeBytes    int64  `json:"size_bytes"`
+	Width        *int   `json:"width"`
+	Height       *int   `json:"height"`
+}
+
 func (s *Server) handleUpdateMediaPlacement(w http.ResponseWriter, r *http.Request) {
 	placementID, err := mediaPlacementIDFromRequest(r)
 	if err != nil || placementID <= 0 {
@@ -604,6 +618,66 @@ func (s *Server) handleReorderProjectMedia(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) handlePublicProjectMedia(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+
+	project, err := s.projects.ByPublicSlug(r.Context(), slug)
+	switch {
+	case errors.Is(err, domain.ErrProjectNotFound):
+		writeJSON(
+			w, http.StatusNotFound,
+			map[string]string{
+				"error": "project not found",
+			},
+		)
+		return
+
+	case err != nil:
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	placements, err := s.media.ListProjectMedia(r.Context(), project.ID)
+	if err != nil {
+		writeJSON(
+			w, http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	response := make([]publicProjectMediaResponse, 0, len(placements))
+	for _, placement := range placements {
+		asset, err := s.media.AssetByID(r.Context(), placement.AssetID)
+		if err != nil {
+			writeJSON(
+				w, http.StatusInternalServerError,
+				map[string]string{
+					"error": "internal server error",
+				},
+			)
+			return
+		}
+
+		response = append(
+			response,
+			publicProjectMediaResponse{
+				Placement: mediaPlacementToResponse(placement),
+				Asset:     publicMediaAssetToResponse(asset), // NOTE: Single JOIN query later
+			},
+		)
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
 func mediaAssetToResponse(asset *domain.MediaAsset) mediaAssetResponse {
 	return mediaAssetResponse{
 		ID:           asset.ID,
@@ -615,6 +689,17 @@ func mediaAssetToResponse(asset *domain.MediaAsset) mediaAssetResponse {
 		Height:       asset.Height,
 		CreatedAt:    asset.CreatedAt,
 		UpdatedAt:    asset.UpdatedAt,
+	}
+}
+
+func publicMediaAssetToResponse(asset *domain.MediaAsset) publicMediaAssetResponse {
+	return publicMediaAssetResponse{
+		ID:           asset.ID,
+		OriginalName: asset.OriginalName,
+		MIMEType:     asset.MIMEType,
+		SizeBytes:    asset.SizeBytes,
+		Width:        asset.Width,
+		Height:       asset.Height,
 	}
 }
 

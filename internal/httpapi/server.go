@@ -90,6 +90,7 @@ func (s *Server) routes() {
 			r.Post("/projects/{id}/archive", s.handleArchiveProject)
 
 			r.Get("/projects/{id}/media", s.handleListProjectMedia)
+			r.Get("/public/projects/{slug}/media", s.handlePublicProjectMedia)
 		})
 	})
 }
