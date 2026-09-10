@@ -12,6 +12,7 @@ type Server struct {
 	users         *service.UserService
 	sessions      *service.SessionService
 	projects      *service.ProjectService
+	media		  *service.MediaService
 	secureCookies bool
 
 	router chi.Router
@@ -21,12 +22,14 @@ func NewServer(
 	users *service.UserService,
 	sessions *service.SessionService,
 	projects *service.ProjectService,
+	media *service.MediaService,
 	secureCookies bool,
 ) *Server {
 	s := &Server{
 		users:         users,
 		sessions:      sessions,
 		projects:      projects,
+		media:		   media,
 		secureCookies: secureCookies,
 		router:        chi.NewRouter(),
 	}

@@ -6,6 +6,7 @@ import (
 	"flowerpress/internal/httpapi"
 	"flowerpress/internal/service"
 	"flowerpress/internal/store/turso"
+	"flowerpress/internal/store/filesystem"
 
 	"context"
 	"errors"
@@ -36,6 +37,12 @@ func main() {
 	sessionRepository := turso.NewSessionRepository(db)
 	projectRepository := turso.NewProjectRepository(db)
 
+	mediaAssetRepository := turso.NewMediaAssetRepository(db)
+	mediaPlacementRepository := turso.NewMediaPlacementRepository(db)
+	
+	// Storage implementation
+	mediaStorage := filesystem.NewMediaStorage(cfg.MediaPath)
+
 	// Services
 	userService := service.NewUserService(userRepository)
 
@@ -47,10 +54,20 @@ func main() {
 
 	projectService := service.NewProjectService(projectRepository)
 
+	mediaService := service.NewMediaService(
+		mediaAssetRepository,
+		mediaPlacementRepository,
+		projectRepository,
+		mediaStorage,
+	)
+
+
+	// Servers
 	apiServer := httpapi.NewServer(
 		userService,
 		sessionService,
 		projectService,
+		mediaService,
 		cfg.SecureCookies,
 	)
 
