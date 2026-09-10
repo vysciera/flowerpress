@@ -249,7 +249,7 @@ func (s *Server) handlePlaceMedia(w http.ResponseWriter, r *http.Request) {
 		errors.Is(err, service.ErrInvalidMediaPosition):
 
 		writeJSON(
-			w, http.StatusNotFound,
+			w, http.StatusBadRequest,
 			map[string]string{
 				"error": "media asset not found",
 			},

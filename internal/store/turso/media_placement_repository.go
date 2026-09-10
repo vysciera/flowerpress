@@ -291,7 +291,7 @@ func (r *MediaPlacementRepository) Reorder(ctx context.Context, projectID int64,
 			`
 				UPDATE media_placements
 				SET position = ?,
-					updateD_at = CURRENT_TIMESTAMP
+					updated_at = CURRENT_TIMESTAMP
 				WHERE id = ?
 					AND project_id = ?
 					AND role = ?
